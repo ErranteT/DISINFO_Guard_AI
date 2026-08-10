@@ -132,3 +132,12 @@ Poza bieżącym zakresem pozostają między innymi:
 - pełna obsługa każdego rodzaju URL.
 
 Rozszerzenie tych granic wymaga osobnej decyzji produktowej.
+
+
+## Referencja UX/UI
+
+Plik `docs/references/disinfo-guard-prototype.html` stanowi wizualne i interakcyjne źródło referencyjne dla głównego interfejsu aplikacji.
+
+Przy implementacji docelowej wersji należy zachować przede wszystkim charakter centralnego radial hubu, hierarchię głównej akcji oraz ogólną kompozycję ekranu startowego.
+
+Plik nie jest kodem produkcyjnym ani źródłem prawdy dla logiki aplikacji. Jego demonstracyjna logika, dane i stany nie powinny być kopiowane 1:1 do Course MVP.
