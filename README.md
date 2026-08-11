@@ -16,9 +16,9 @@ Głównym użytkownikiem jest osoba korzystająca z internetu i mediów społecz
 
 ## Zakres Course MVP
 
-Course MVP obejmuje rzeczywistą analizę materiału wskazanego przez URL.
+Docelowy Course MVP obejmuje rzeczywistą analizę materiału wskazanego przez URL.
 
-Podstawowy przepływ:
+Docelowy podstawowy przepływ:
 
 1. Użytkownik podaje URL.
 2. Backend waliduje adres i pobiera dostępny materiał.
@@ -61,11 +61,23 @@ Kluczowym elementem koncepcji pozostaje centralny radial hub z główną akcją 
 
 ## Stan projektu
 
-Projekt jest obecnie w fazie przygotowania fundamentu technicznego.
+Pierwszy pionowy wycinek frontend → backend jest zaimplementowany. Centralny radial hub prowadzi do formularza URL, który wysyła `POST /api/prepare`. Endpoint przygotowuje adres wyłącznie przez backendową walidację i zwraca ustrukturyzowaną odpowiedź JSON. Frontend obsługuje lokalne stany loading, success i error.
+
+`prepare` nie pobiera treści strony i nie wykonuje fact-checkingu. Status `ready` oznacza tylko, że URL przeszedł walidację i może zostać przekazany do przyszłego etapu.
+
+Aktualny endpoint przyjmuje wyłącznie:
+
+```json
+{
+  "url": "https://example.com/article"
+}
+```
+
+Użyte technologie w tym wycinku to Next.js, TypeScript i Route Handlers. Walidacja URL ma małe testy uruchamiane wbudowanym mechanizmem Node, bez dodatkowego frameworka testowego.
 
 Docelowa architektura Course MVP zakłada wykorzystanie Next.js, TypeScript, Route Handlers, Supabase, Tavily, jednego abstrahowanego LLM oraz Vercel.
 
-Integracje i właściwa funkcjonalność analizy nie zostały jeszcze zaimplementowane.
+Nie zaimplementowano jeszcze zewnętrznego fetchu, Tavily, LLM, Supabase, Claim Extractora, wyszukiwania źródeł, analizy dowodów, końcowego wyniku ani zapisu historii analiz.
 
 ## Uruchomienie lokalne
 

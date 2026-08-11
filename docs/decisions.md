@@ -381,3 +381,25 @@ Ułatwia kontrolę zmian, testowanie, naukę i późniejsze wykonanie zadania ku
 ### Konsekwencje
 
 Codex nie powinien otrzymywać poleceń typu „zbuduj całą aplikację”.
+
+---
+
+## D-019 — `prepare` jest minimalnym etapem backendowego przygotowania URL
+
+### Kontekst
+
+Pierwszy pionowy wycinek ma połączyć interfejs z backendem bez rozpoczynania analizy materiału ani integracji zewnętrznych.
+
+### Wybrane rozwiązanie
+
+Endpoint `POST /api/prepare` przyjmuje wyłącznie `{ url: string }`. Route Handler odpowiada za HTTP, a osobny walidator URL za reguły wejścia. Poprawny adres zwraca `200` i status `ready`; błędy wejścia zwracają `400` ze statusem `invalid_input`, a nieoczekiwane błędy `500` ze statusem `error`.
+
+Walidator blokuje oczywiste adresy lokalne, ale pełna ochrona SSRF zostaje odłożona do etapu realnego fetchu. Testy walidatora używają wbudowanego mechanizmu Node, bez dodawania frameworka testowego.
+
+### Główny powód
+
+Zapewnia mały, testowalny kontrakt frontend → backend i zachowuje backendową własność walidacji oraz statusów.
+
+### Konsekwencje
+
+`ready` oznacza wyłącznie gotowość URL do przyszłego etapu. Endpoint nie pobiera stron, nie wykonuje fact-checkingu, nie wyodrębnia claimu, nie wyszukuje źródeł i nie korzysta z Tavily, LLM ani Supabase.
