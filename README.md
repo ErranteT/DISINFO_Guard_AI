@@ -61,9 +61,9 @@ Kluczowym elementem koncepcji pozostaje centralny radial hub z główną akcją 
 
 ## Stan projektu
 
-Pierwszy pionowy wycinek frontend → backend jest zaimplementowany. Centralny radial hub prowadzi do formularza URL, który wysyła `POST /api/prepare`. Endpoint przygotowuje adres wyłącznie przez backendową walidację i zwraca ustrukturyzowaną odpowiedź JSON. Frontend obsługuje lokalne stany loading, success i error.
+Pionowy wycinek frontend → backend obejmuje obecnie SAFE FETCH. Centralny radial hub prowadzi do formularza URL, który wysyła `POST /api/prepare`. Backend waliduje adres, kontroluje DNS/IP, ręcznie obsługuje przekierowania, pobiera publicznie dostępny materiał HTML lub plain text i przygotowuje znormalizowany tekst. Frontend obsługuje stany loading, success i error.
 
-`prepare` nie pobiera treści strony i nie wykonuje fact-checkingu. Status `ready` oznacza tylko, że URL przeszedł walidację i może zostać przekazany do przyszłego etapu.
+Status `ready` oznacza, że materiał został pobrany i przygotowany. Nie oznacza wyodrębnienia claimu ani wykonania fact-checkingu.
 
 Aktualny endpoint przyjmuje wyłącznie:
 
@@ -73,11 +73,13 @@ Aktualny endpoint przyjmuje wyłącznie:
 }
 ```
 
-Użyte technologie w tym wycinku to Next.js, TypeScript i Route Handlers. Walidacja URL ma małe testy uruchamiane wbudowanym mechanizmem Node, bez dodatkowego frameworka testowego.
+Obsługiwane są wyłącznie odpowiedzi `text/html` i `text/plain` w UTF-8, bez kompresji transportowej. Pojedynczy request ma limit 10 sekund, body limit 2 MB, a łańcuch może zawierać maksymalnie 3 ręcznie walidowane redirecty. HTML jest parsowany przez `parse5`; usuwane są `script`, `style` i `noscript`, bez Readability i bez wyboru głównego artykułu.
+
+Użyte technologie w tym wycinku to Next.js, TypeScript, Route Handlers i `parse5`. Testy używają wbudowanego mechanizmu Node, bez dodatkowego frameworka testowego i bez publicznego internetu.
 
 Docelowa architektura Course MVP zakłada wykorzystanie Next.js, TypeScript, Route Handlers, Supabase, Tavily, jednego abstrahowanego LLM oraz Vercel.
 
-Nie zaimplementowano jeszcze zewnętrznego fetchu, Tavily, LLM, Supabase, Claim Extractora, wyszukiwania źródeł, analizy dowodów, końcowego wyniku ani zapisu historii analiz.
+Nie zaimplementowano jeszcze Tavily, LLM, Supabase, Claim Extractora, wyszukiwania źródeł, analizy dowodów, końcowego wyniku ani zapisu historii analiz.
 
 ## Uruchomienie lokalne
 

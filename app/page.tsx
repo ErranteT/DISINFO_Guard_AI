@@ -8,22 +8,27 @@ type RequestState = "idle" | "loading" | "success" | "error";
 const technicalErrorMessage =
   "Nie udało się przygotować adresu. Spróbuj ponownie za chwilę.";
 
-function isReadyResponse(value: unknown): value is { status: "ready"; url: string } {
+function isReadyResponse(value: unknown): value is {
+  status: "ready"; url: string; finalUrl: string; contentType: string; text: string;
+} {
   return (
     typeof value === "object" &&
     value !== null &&
     (value as { status?: unknown }).status === "ready" &&
-    typeof (value as { url?: unknown }).url === "string"
+    typeof (value as { url?: unknown }).url === "string" &&
+    typeof (value as { finalUrl?: unknown }).finalUrl === "string" &&
+    typeof (value as { contentType?: unknown }).contentType === "string" &&
+    typeof (value as { text?: unknown }).text === "string"
   );
 }
 
-function isInputErrorResponse(
+function isControlledErrorResponse(
   value: unknown,
-): value is { status: "invalid_input"; code: string; message: string } {
+): value is { status: "invalid_input" | "error"; code: string; message: string } {
   return (
     typeof value === "object" &&
     value !== null &&
-    (value as { status?: unknown }).status === "invalid_input" &&
+    ["invalid_input", "error"].includes((value as { status?: string }).status ?? "") &&
     typeof (value as { code?: unknown }).code === "string" &&
     typeof (value as { message?: unknown }).message === "string"
   );
@@ -72,7 +77,7 @@ export default function Home() {
       if (
         response.status >= 400 &&
         response.status < 500 &&
-        isInputErrorResponse(payload)
+        isControlledErrorResponse(payload)
       ) {
         setRequestState("error");
         setInputError(payload.message);
@@ -132,7 +137,7 @@ export default function Home() {
           <div className={styles.formHeading}>
             <div>
               <h2 id="form-title">Dodaj adres URL</h2>
-              <p>Na tym etapie sprawdzamy wyłącznie poprawność adresu.</p>
+              <p>Pobierzemy publicznie dostępny materiał HTML lub tekstowy.</p>
             </div>
             <button className={styles.backButton} type="button" onClick={() => setShowForm(false)}>
               Wróć do hubu
@@ -153,12 +158,12 @@ export default function Home() {
             />
             {inputError ? <p id="url-error" className={styles.inputError} role="alert">{inputError}</p> : null}
             <button className={styles.submitButton} type="submit" disabled={requestState === "loading"}>
-              {requestState === "loading" ? "Sprawdzam adres…" : "Przygotuj adres"}
+              {requestState === "loading" ? "Pobieram materiał…" : "Przygotuj materiał"}
             </button>
           </form>
           {requestState === "success" ? (
             <p className={styles.successMessage} role="status">
-              Adres przeszedł walidację i jest gotowy do dalszego etapu.
+              Materiał został bezpiecznie pobrany i przygotowany do dalszego etapu.
             </p>
           ) : null}
           {technicalError ? <p className={styles.technicalError} role="alert">{technicalError}</p> : null}

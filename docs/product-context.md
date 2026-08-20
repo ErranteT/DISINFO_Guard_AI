@@ -84,6 +84,8 @@ Niektóre strony mogą być niedostępne z powodów technicznych, wymagać logow
 
 Takie przypadki powinny kończyć się kontrolowanym stanem aplikacji, a nie wymyślonym wynikiem.
 
+Etap SAFE FETCH obsługuje wyłącznie publicznie routowalne cele HTTP/HTTPS zwracające HTML lub plain text w UTF-8. Nie renderuje JavaScriptu, nie obsługuje PDF, obrazów ani innych formatów i nie próbuje omijać zabezpieczeń stron.
+
 ## Screenshot i OCR
 
 Rzeczywista analiza screenshotów oraz OCR pozostają poza Course MVP.

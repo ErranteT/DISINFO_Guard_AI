@@ -10,16 +10,14 @@ Dokument nie oznacza, że wszystkie opisane elementy zostały już zaimplementow
 
 ## Stan obecny
 
-Projekt znajduje się na etapie przygotowania fundamentu technicznego.
-
-Na tym etapie działa pierwszy pionowy wycinek przygotowania URL:
+Projekt posiada pionowy wycinek bezpiecznego przygotowania materiału z URL:
 
 - nie działa jeszcze pipeline analizy;
 - Supabase nie jest jeszcze zintegrowany;
 - Tavily nie jest jeszcze zintegrowane;
 - LLM nie jest jeszcze podłączony;
 - działa endpoint `POST /api/prepare`;
-- nie ma zewnętrznego pobierania stron ani zapisu analiz;
+- działa kontrolowane pobieranie HTML/plain text, bez zapisu analiz;
 - deployment produkcyjny nie został jeszcze wykonany.
 
 ## Docelowy stack Course MVP
@@ -51,7 +49,7 @@ Frontend nie powinien samodzielnie wyznaczać statusów analizy.
 
 LLM nie powinien samodzielnie wyznaczać finalnego statusu aplikacji.
 
-## Zaimplementowany wycinek: `prepare`
+## Zaimplementowany wycinek: `prepare` / SAFE FETCH
 
 ```text
 centralny radial hub
@@ -62,12 +60,22 @@ Next.js Route Handler
     ↓
 validatePrepareUrl()
     ↓
+DNS i klasyfikacja wszystkich IP (fail-closed)
+    ↓
+kontrolowany request ze związanym lookup
+    ↓
+ręczne, ponownie walidowane redirecty
+    ↓
+limity i polityka odpowiedzi
+    ↓
+minimalne HTML/plain text → tekst
+    ↓
 ustrukturyzowany JSON response
     ↓
 lokalny stan UI: loading / success / error
 ```
 
-Route Handler jest właścicielem warstwy HTTP: odczytuje body JSON, przekazuje wyłącznie pole `url` do `validatePrepareUrl()` i mapuje wynik na odpowiedź HTTP. Walidator jest oddzielony od handlera, dzięki czemu reguły URL można testować bez warstwy HTTP.
+Route Handler jest cienką warstwą HTTP: odczytuje body JSON, uruchamia orkiestrację przygotowania materiału i mapuje kontrolowane wyniki na JSON. Walidacja wejścia, target/DNS/IP safety, transport HTTP oraz konwersja treści są rozdzielone w `lib/`.
 
 Request ma minimalny kontrakt:
 
@@ -77,11 +85,13 @@ Request ma minimalny kontrakt:
 }
 ```
 
-Prawidłowy adres zwraca `200 OK` z `{ "status": "ready", "url": string }`. Błędy wejścia zwracają `400 Bad Request`, status `invalid_input` i jeden z kodów `URL_REQUIRED`, `INVALID_URL`, `UNSUPPORTED_PROTOCOL` lub `LOCAL_URL_NOT_ALLOWED`. Nieoczekiwany błąd handlera zwraca `500 Internal Server Error` ze statusem `error` i kodem `INTERNAL_ERROR`.
+Prawidłowo przygotowany materiał zwraca `200 OK` z polami `status`, `url`, `finalUrl`, `contentType` i `text`. Błędy wejścia zachowują status `invalid_input` oraz kody `URL_REQUIRED`, `INVALID_URL`, `UNSUPPORTED_PROTOCOL` i `LOCAL_URL_NOT_ALLOWED`. Kontrolowane błędy SAFE FETCH zwracają status `error` i stabilny kod; nieoczekiwany błąd handlera zwraca `INTERNAL_ERROR` bez surowych szczegółów infrastruktury.
 
-Walidacja wymaga niepustego stringa po `trim()`, poprawnego URL oraz protokołu `http:` lub `https:`. Blokuje `localhost`, subdomeny `*.localhost`, IPv4 z zakresu `127.0.0.0/8` i IPv6 `::1`. Są to tylko podstawowe blokady lokalnych adresów, a nie pełna ochrona SSRF. Pełna ochrona SSRF zostanie zaprojektowana przy etapie rzeczywistego fetchowania zewnętrznych stron, ponieważ obecny etap nie wykonuje żadnego zewnętrznego fetchu.
+Walidacja wejścia wymaga niepustego stringa, poprawnego URL i protokołu HTTP/HTTPS oraz zachowuje wcześniejsze blokady lokalnych adresów. Przed każdym requestem — również po redirectach — hostname jest rozwiązywany, a każdy wynik DNS musi być publicznym, routowalnym adresem. Literalne IP przechodzą tę samą klasyfikację. Zaakceptowany adres jest przypinany do właściwego requestu przez kontrolowany `lookup`, co eliminuje niezależne ponowne rozwiązanie DNS.
 
-Status `ready` oznacza wyłącznie zaakceptowanie URL przez backendową walidację i gotowość do przyszłego etapu. Nie oznacza pobrania treści, wyodrębnienia claimu, wyszukania źródeł ani zakończenia analizy. W tym wycinku nie istnieją integracje z Tavily, LLM ani Supabase.
+Redirecty 301, 302, 303, 307 i 308 są obsługiwane ręcznie, maksymalnie 3 razy. Każdy request ma limit 10 sekund, a surowe body limit 2 MB sprawdzany z `Content-Length` i podczas odczytu strumienia. Sukces wymaga statusu 2xx, `text/html` lub `text/plain`, UTF-8 oraz braku kodowania transportowego innego niż `identity`.
+
+HTML jest parsowany przez `parse5`; usuwane są `script`, `style` i `noscript`, po czym tekst jest normalizowany. Nie ma Readability, renderowania JavaScriptu, ekstrakcji metadanych ani Claim Extractora. Status `ready` oznacza wyłącznie gotowy tekst, a nie wyszukanie źródeł lub zakończenie analizy. W tym wycinku nie istnieją integracje z Tavily, LLM ani Supabase.
 
 ## Docelowy główny przepływ Course MVP
 

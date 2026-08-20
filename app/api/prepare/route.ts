@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
-import { validatePrepareUrl } from "@/lib/validate-prepare-url";
+import { prepareMaterial } from "@/lib/prepare-material";
+import { SafeFetchError } from "@/lib/safe-fetch/errors";
+
+export const runtime = "nodejs";
 
 const internalError = {
   status: "error",
@@ -20,17 +23,27 @@ export async function POST(request: Request) {
       typeof body === "object" && body !== null && "url" in body
         ? (body as { url: unknown }).url
         : undefined;
-    const validation = validatePrepareUrl(url);
+    const result = await prepareMaterial(url);
 
-    if (!validation.ok) {
+    if ("ok" in result && !result.ok) {
       return NextResponse.json(
-        { status: "invalid_input", code: validation.code, message: validation.message },
+        { status: "invalid_input", code: result.code, message: result.message },
         { status: 400 },
       );
     }
 
-    return NextResponse.json({ status: "ready", url: validation.url });
-  } catch {
+    return NextResponse.json(result);
+  } catch (error) {
+    if (error instanceof SafeFetchError) {
+      const status = error.code === "FETCH_TIMEOUT" ? 504
+        : error.code === "RESPONSE_TOO_LARGE" ? 413
+        : error.code === "UNSAFE_TARGET" || error.code === "INVALID_REDIRECT" || error.code === "TOO_MANY_REDIRECTS" ? 400
+        : 422;
+      return NextResponse.json(
+        { status: "error", code: error.code, message: error.message },
+        { status },
+      );
+    }
     return NextResponse.json(internalError, { status: 500 });
   }
 }

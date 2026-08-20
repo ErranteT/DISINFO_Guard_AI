@@ -403,3 +403,23 @@ Zapewnia mały, testowalny kontrakt frontend → backend i zachowuje backendową
 ### Konsekwencje
 
 `ready` oznacza wyłącznie gotowość URL do przyszłego etapu. Endpoint nie pobiera stron, nie wykonuje fact-checkingu, nie wyodrębnia claimu, nie wyszukuje źródeł i nie korzysta z Tavily, LLM ani Supabase.
+
+---
+
+## D-020 — SAFE FETCH przygotowuje kontrolowany tekst z publicznego URL
+
+### Kontekst
+
+Etap 04 rozszerza wcześniejszą walidację o rzeczywiste pobranie materiału bez budowania general-purpose scrapera.
+
+### Wybrane rozwiązanie
+
+`POST /api/prepare` używa Node.js Runtime i kontrolowanego transportu HTTP/HTTPS. Wszystkie wyniki DNS muszą być publiczne, a zaakceptowany adres jest związany z requestem przez `lookup`. Redirecty są ręczne i ponownie walidowane. Obsługiwane są wyłącznie nieskompresowane `text/html` i `text/plain` w UTF-8, z limitem 10 sekund na request, 2 MB body i 3 redirectów. Minimalne parsowanie HTML wykonuje `parse5`.
+
+### Główny powód
+
+Pozwala bezpiecznie przygotować tekst dla przyszłego Claim Extractora, ograniczając SSRF, DNS rebinding, niekontrolowane redirecty i nadmierne odpowiedzi.
+
+### Konsekwencje
+
+`ready` oznacza teraz przygotowany tekst. SAFE FETCH nie renderuje JavaScriptu, nie wybiera głównego artykułu, nie odczytuje metadanych i nie wykonuje żadnej analizy AI.
