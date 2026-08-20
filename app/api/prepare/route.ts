@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { prepareMaterial } from "@/lib/prepare-material";
+import { ClaimExtractorError } from "@/lib/claim-extractor";
+import { prepareClaimFlow } from "@/lib/claim-flow";
 import { SafeFetchError } from "@/lib/safe-fetch/errors";
 
 export const runtime = "nodejs";
@@ -19,11 +20,7 @@ export async function POST(request: Request) {
       body = undefined;
     }
 
-    const url =
-      typeof body === "object" && body !== null && "url" in body
-        ? (body as { url: unknown }).url
-        : undefined;
-    const result = await prepareMaterial(url);
+    const result = await prepareClaimFlow(body);
 
     if ("ok" in result && !result.ok) {
       return NextResponse.json(
@@ -39,6 +36,16 @@ export async function POST(request: Request) {
         : error.code === "RESPONSE_TOO_LARGE" ? 413
         : error.code === "UNSAFE_TARGET" || error.code === "INVALID_REDIRECT" || error.code === "TOO_MANY_REDIRECTS" ? 400
         : 422;
+      return NextResponse.json(
+        { status: "error", code: error.code, message: error.message },
+        { status },
+      );
+    }
+    if (error instanceof ClaimExtractorError) {
+      const status = error.code === "CLAIM_PROVIDER_TIMEOUT" ? 504
+        : error.code === "CLAIM_RATE_LIMITED" ? 429
+        : error.code === "CLAIM_CONFIGURATION_ERROR" ? 500
+        : 502;
       return NextResponse.json(
         { status: "error", code: error.code, message: error.message },
         { status },

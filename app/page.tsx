@@ -1,24 +1,46 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { acceptClaim, rejectClaim, type PendingClaim } from "@/lib/claim-review";
 import styles from "./page.module.css";
 
-type RequestState = "idle" | "loading" | "success" | "error";
+type RequestState =
+  | "idle"
+  | "loading"
+  | "claim_pending"
+  | "claim_unresolved"
+  | "error";
+
+type UnresolvedReason = "no_checkable_claim" | "insufficient_content" | "rejected_limit";
 
 const technicalErrorMessage =
-  "Nie udało się przygotować adresu. Spróbuj ponownie za chwilę.";
+  "Nie udało się wyodrębnić twierdzenia. Spróbuj ponownie za chwilę.";
 
-function isReadyResponse(value: unknown): value is {
-  status: "ready"; url: string; finalUrl: string; contentType: string; text: string;
+function isClaimPendingResponse(value: unknown): value is {
+  status: "claim_pending"; claim: string; attempt: number;
 } {
   return (
     typeof value === "object" &&
     value !== null &&
-    (value as { status?: unknown }).status === "ready" &&
-    typeof (value as { url?: unknown }).url === "string" &&
-    typeof (value as { finalUrl?: unknown }).finalUrl === "string" &&
-    typeof (value as { contentType?: unknown }).contentType === "string" &&
-    typeof (value as { text?: unknown }).text === "string"
+    (value as { status?: unknown }).status === "claim_pending" &&
+    typeof (value as { claim?: unknown }).claim === "string" &&
+    Number.isInteger((value as { attempt?: unknown }).attempt) &&
+    Number((value as { attempt?: unknown }).attempt) >= 1 &&
+    Number((value as { attempt?: unknown }).attempt) <= 3
+  );
+}
+
+function isClaimUnresolvedResponse(value: unknown): value is {
+  status: "claim_unresolved";
+  reason: "no_checkable_claim" | "insufficient_content";
+} {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as { status?: unknown }).status === "claim_unresolved" &&
+    ["no_checkable_claim", "insufficient_content"].includes(
+      String((value as { reason?: unknown }).reason),
+    )
   );
 }
 
@@ -34,24 +56,40 @@ function isControlledErrorResponse(
   );
 }
 
+function unresolvedMessage(reason: UnresolvedReason): string {
+  if (reason === "insufficient_content") {
+    return "Materiał nie zawiera wystarczającej treści do wyodrębnienia twierdzenia.";
+  }
+  if (reason === "rejected_limit") {
+    return "Odrzucono trzy propozycje. Nie udało się uzyskać twierdzenia do dalszej analizy.";
+  }
+  return "W materiale nie znaleziono jednego konkretnego, sprawdzalnego twierdzenia.";
+}
+
 export default function Home() {
   const [showForm, setShowForm] = useState(false);
   const [url, setUrl] = useState("");
   const [requestState, setRequestState] = useState<RequestState>("idle");
+  const [pendingClaim, setPendingClaim] = useState<PendingClaim | null>(null);
+  const [acceptedClaim, setAcceptedClaim] = useState("");
+  const [rejectedClaims, setRejectedClaims] = useState<string[]>([]);
+  const [unresolvedReason, setUnresolvedReason] = useState<UnresolvedReason | null>(null);
   const [inputError, setInputError] = useState("");
   const [technicalError, setTechnicalError] = useState("");
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function requestClaim(attempt: number, previousRejectedClaims: string[]) {
     setRequestState("loading");
     setInputError("");
     setTechnicalError("");
 
     try {
+      const body = attempt === 1
+        ? { url }
+        : { url, attempt, rejectedClaims: previousRejectedClaims };
       const response = await fetch("/api/prepare", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url }),
+        body: JSON.stringify(body),
       });
 
       let payload: unknown;
@@ -63,22 +101,19 @@ export default function Home() {
         return;
       }
 
-      if (response.ok) {
-        if (!isReadyResponse(payload)) {
-          setRequestState("error");
-          setTechnicalError(technicalErrorMessage);
-          return;
-        }
-
-        setRequestState("success");
+      if (response.ok && isClaimPendingResponse(payload)) {
+        setPendingClaim({ claim: payload.claim, attempt: payload.attempt });
+        setRejectedClaims(previousRejectedClaims);
+        setRequestState("claim_pending");
         return;
       }
-
-      if (
-        response.status >= 400 &&
-        response.status < 500 &&
-        isControlledErrorResponse(payload)
-      ) {
+      if (response.ok && isClaimUnresolvedResponse(payload)) {
+        setPendingClaim(null);
+        setUnresolvedReason(payload.reason);
+        setRequestState("claim_unresolved");
+        return;
+      }
+      if (isControlledErrorResponse(payload) && payload.status === "invalid_input") {
         setRequestState("error");
         setInputError(payload.message);
         return;
@@ -92,6 +127,48 @@ export default function Home() {
     }
   }
 
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setPendingClaim(null);
+    setAcceptedClaim("");
+    setRejectedClaims([]);
+    setUnresolvedReason(null);
+    await requestClaim(1, []);
+  }
+
+  function handleAccept() {
+    if (!pendingClaim) return;
+    const result = acceptClaim(pendingClaim);
+    setAcceptedClaim(result.claim);
+    setPendingClaim(null);
+    setRequestState("idle");
+  }
+
+  async function handleReject() {
+    if (!pendingClaim) return;
+    const result = rejectClaim(pendingClaim, rejectedClaims);
+    if (result.action === "unresolved") {
+      setPendingClaim(null);
+      setUnresolvedReason(result.reason);
+      setRequestState("claim_unresolved");
+      return;
+    }
+    if (result.action === "retry") {
+      await requestClaim(result.attempt, result.rejectedClaims);
+    }
+  }
+
+  function resetToHub() {
+    setShowForm(false);
+    setRequestState("idle");
+    setPendingClaim(null);
+    setAcceptedClaim("");
+    setRejectedClaims([]);
+    setUnresolvedReason(null);
+    setInputError("");
+    setTechnicalError("");
+  }
+
   return (
     <main className={styles.page}>
       <header className={styles.header}>
@@ -103,9 +180,9 @@ export default function Home() {
       </header>
 
       <section className={styles.hero} aria-labelledby="page-title">
-        <span className={styles.eyebrow}>Przygotowanie materiału</span>
+        <span className={styles.eyebrow}>Wyodrębnianie twierdzenia</span>
         <h1 id="page-title">Sprawdź, zanim uwierzysz.</h1>
-        <p>Dodaj adres artykułu lub posta, który chcesz przygotować do dalszego etapu.</p>
+        <p>Dodaj adres artykułu lub posta, aby wyodrębnić jedno twierdzenie do dalszej analizy.</p>
       </section>
 
       {!showForm ? (
@@ -128,7 +205,7 @@ export default function Home() {
           </div>
           <button className={styles.hubButton} type="button" onClick={() => setShowForm(true)}>
             <span className={styles.hubIcon} aria-hidden="true">✦</span>
-            <strong>Przygotuj<br />adres URL</strong>
+            <strong>Sprawdź<br />adres URL</strong>
             <small>Kliknij, aby zacząć</small>
           </button>
         </section>
@@ -137,9 +214,9 @@ export default function Home() {
           <div className={styles.formHeading}>
             <div>
               <h2 id="form-title">Dodaj adres URL</h2>
-              <p>Pobierzemy publicznie dostępny materiał HTML lub tekstowy.</p>
+              <p>Pobierzemy materiał i wyodrębnimy jedno sprawdzalne twierdzenie.</p>
             </div>
-            <button className={styles.backButton} type="button" onClick={() => setShowForm(false)}>
+            <button className={styles.backButton} type="button" onClick={resetToHub}>
               Wróć do hubu
             </button>
           </div>
@@ -158,12 +235,33 @@ export default function Home() {
             />
             {inputError ? <p id="url-error" className={styles.inputError} role="alert">{inputError}</p> : null}
             <button className={styles.submitButton} type="submit" disabled={requestState === "loading"}>
-              {requestState === "loading" ? "Pobieram materiał…" : "Przygotuj materiał"}
+              {requestState === "loading" ? "Analizuję materiał…" : "Wyodrębnij twierdzenie"}
             </button>
           </form>
-          {requestState === "success" ? (
-            <p className={styles.successMessage} role="status">
-              Materiał został bezpiecznie pobrany i przygotowany do dalszego etapu.
+
+          {requestState === "claim_pending" && pendingClaim ? (
+            <section className={styles.claimCard} aria-labelledby="claim-title">
+              <p className={styles.claimAttempt}>Propozycja {pendingClaim.attempt} z 3</p>
+              <h3 id="claim-title">Wyodrębnione twierdzenie</h3>
+              <blockquote>{pendingClaim.claim}</blockquote>
+              <div className={styles.claimActions}>
+                <button className={styles.acceptButton} type="button" onClick={handleAccept}>Akceptuj</button>
+                <button className={styles.rejectButton} type="button" onClick={handleReject}>Odrzuć</button>
+              </div>
+            </section>
+          ) : null}
+
+          {acceptedClaim ? (
+            <div className={styles.successMessage} role="status">
+              <strong>Twierdzenie zaakceptowane.</strong>
+              <p>{acceptedClaim}</p>
+              <span>Jest gotowe do dalszej analizy, która zostanie dodana w kolejnym etapie.</span>
+            </div>
+          ) : null}
+
+          {requestState === "claim_unresolved" && unresolvedReason ? (
+            <p className={styles.unresolvedMessage} role="status">
+              {unresolvedMessage(unresolvedReason)}
             </p>
           ) : null}
           {technicalError ? <p className={styles.technicalError} role="alert">{technicalError}</p> : null}

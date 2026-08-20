@@ -61,25 +61,19 @@ Kluczowym elementem koncepcji pozostaje centralny radial hub z główną akcją 
 
 ## Stan projektu
 
-Pionowy wycinek frontend → backend obejmuje obecnie SAFE FETCH. Centralny radial hub prowadzi do formularza URL, który wysyła `POST /api/prepare`. Backend waliduje adres, kontroluje DNS/IP, ręcznie obsługuje przekierowania, pobiera publicznie dostępny materiał HTML lub plain text i przygotowuje znormalizowany tekst. Frontend obsługuje stany loading, success i error.
+Pionowy wycinek frontend → backend obejmuje SAFE FETCH oraz Claim Flow. Centralny radial hub prowadzi do formularza URL, który wysyła `POST /api/prepare`. Backend waliduje adres, wykonuje SAFE FETCH, przygotowuje tekst i przekazuje maksymalnie pierwsze 15 000 znaków do Claim Extractora. Extractor używa Groq Cloud i modelu `openai/gpt-oss-20b`; jego structured output jest niezależnie walidowany przez backend.
 
-Status `ready` oznacza, że materiał został pobrany i przygotowany. Nie oznacza wyodrębnienia claimu ani wykonania fact-checkingu.
+Pierwszy request przyjmuje `{ "url": "https://example.com/article" }`. Retry po odrzuceniu przyjmuje dodatkowo `attempt` od 2 do 3 oraz `rejectedClaims`. Stan licznika żyje w frontendzie i nie jest zabezpieczeniem odpornym na ręczne manipulowanie requestem.
 
-Aktualny endpoint przyjmuje wyłącznie:
-
-```json
-{
-  "url": "https://example.com/article"
-}
-```
+Poprawny claim zwraca `claim_pending` z jednym twierdzeniem i numerem próby. Poprawny wynik `no_claim` natychmiast zwraca `claim_unresolved`. Frontend pozwala zaakceptować claim lub odrzucić go; maksymalnie trzecie odrzucenie kończy Claim Flow jako `claim_unresolved`. Accept nie uruchamia jeszcze dalszej analizy i nie tworzy nowego statusu API.
 
 Obsługiwane są wyłącznie odpowiedzi `text/html` i `text/plain` w UTF-8, bez kompresji transportowej. Pojedynczy request ma limit 10 sekund, body limit 2 MB, a łańcuch może zawierać maksymalnie 3 ręcznie walidowane redirecty. HTML jest parsowany przez `parse5`; usuwane są `script`, `style` i `noscript`, bez Readability i bez wyboru głównego artykułu.
 
-Użyte technologie w tym wycinku to Next.js, TypeScript, Route Handlers i `parse5`. Testy używają wbudowanego mechanizmu Node, bez dodatkowego frameworka testowego i bez publicznego internetu.
+Użyte technologie w tym wycinku to Next.js, TypeScript, Route Handlers, `parse5` i natywny backendowy `fetch` do zgodnego z OpenAI endpointu Groq. Testy używają wbudowanego mechanizmu Node, mockują granicę LLM i nie wymagają internetu ani `GROQ_API_KEY`.
 
 Docelowa architektura Course MVP zakłada wykorzystanie Next.js, TypeScript, Route Handlers, Supabase, Tavily, jednego abstrahowanego LLM oraz Vercel.
 
-Nie zaimplementowano jeszcze Tavily, LLM, Supabase, Claim Extractora, wyszukiwania źródeł, analizy dowodów, końcowego wyniku ani zapisu historii analiz.
+Nie zaimplementowano jeszcze Tavily, Supabase, wyszukiwania źródeł, analizy dowodów, właściwego `run`, końcowego wyniku ani zapisu historii analiz.
 
 ## Uruchomienie lokalne
 

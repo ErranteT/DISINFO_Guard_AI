@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "test": "node --test --experimental-strip-types test/*.test.mjs",
+    "test:claim-live": "node --experimental-strip-types --env-file=.env.local scripts/live-claim-extractor.mjs",
     "typecheck": "tsc --noEmit",
     "build": "next build",
     "start": "next start",

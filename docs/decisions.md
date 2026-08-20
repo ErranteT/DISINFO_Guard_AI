@@ -423,3 +423,30 @@ Pozwala bezpiecznie przygotować tekst dla przyszłego Claim Extractora, ogranic
 ### Konsekwencje
 
 `ready` oznacza teraz przygotowany tekst. SAFE FETCH nie renderuje JavaScriptu, nie wybiera głównego artykułu, nie odczytuje metadanych i nie wykonuje żadnej analizy AI.
+
+---
+
+## D-021 — Claim Extractor używa jednego modelu Groq i backendowej walidacji
+
+### Kontekst
+
+Etap 05 rozszerza `/api/prepare` o pierwszy rzeczywisty request backend → LLM, ale kończy się przed wyszukiwaniem evidence i właściwym `run`.
+
+### Wybrane rozwiązanie
+
+Backend przekazuje maksymalnie pierwsze 15 000 znaków przygotowanego tekstu jako niezaufane dane do Groq Cloud, model `openai/gpt-oss-20b`, przez zgodne z OpenAI Chat Completions API i strict JSON Schema. Odpowiedź jest niezależnie walidowana w backendzie. Malformed output ma jeden technical retry. Poprawny claim daje `claim_pending`, a `no_claim` natychmiast daje `claim_unresolved`.
+
+Frontend przechowuje licznik prób i odrzucone claimy. Reject może wywołać ponowny `/api/prepare` i SAFE FETCH dla próby 2 lub 3; trzecie odrzucenie kończy flow. Accept tylko potwierdza claim jako gotowy do przyszłego `run` i nie tworzy nowego statusu API.
+
+### Główny powód
+
+Zapewnia mały, testowalny pion Claim Flow z jednym providerem i modelem, bez wprowadzania persistence, Tavily ani pipeline evidence.
+
+### Konsekwencje
+
+- pełny prepared text nie opuszcza backendu;
+- `GROQ_API_KEY` jest wyłącznie backendową zmienną środowiskową;
+- materiał nie może sterować instrukcją Extractora ani być uzupełniany wiedzą zewnętrzną;
+- identyczny odrzucony claim jest blokowany prostą normalizacją tekstową;
+- limit prób nie jest security boundary odporną na ręczne manipulowanie requestem;
+- Tavily, evidence, `run`, finalny fact-check i Supabase pozostają poza tym etapem.
