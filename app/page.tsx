@@ -2,8 +2,14 @@
 
 import { FormEvent, useState } from "react";
 import { acceptClaim, rejectClaim, type PendingClaim } from "@/lib/claim-review";
-import type { EvidenceClassification, EvidenceRelation } from "@/lib/evidence-analysis";
-import type { EvidenceCandidate } from "@/lib/evidence-retrieval";
+import {
+  overallPatternLabels,
+  relationLabel,
+  runEvidenceFlow,
+  synthesisErrorMessages,
+  type AnalyzedEvidenceCandidate,
+} from "@/lib/evidence-flow";
+import type { EvidenceSynthesisErrorCode, EvidenceSynthesisResult } from "@/lib/evidence-synthesis";
 import styles from "./page.module.css";
 
 type RequestState =
@@ -15,7 +21,6 @@ type RequestState =
 
 type UnresolvedReason = "no_checkable_claim" | "insufficient_content" | "rejected_limit";
 type EvidenceState = "idle" | "loading" | "success" | "error";
-type AnalyzedEvidenceCandidate = EvidenceCandidate & EvidenceClassification;
 
 const technicalErrorMessage =
   "Nie udało się wyodrębnić twierdzenia. Spróbuj ponownie za chwilę.";
@@ -62,59 +67,6 @@ function isControlledErrorResponse(
   );
 }
 
-function isEvidenceResponse(value: unknown): value is { candidates: EvidenceCandidate[] } {
-  if (typeof value !== "object" || value === null || !Array.isArray((value as { candidates?: unknown }).candidates)) {
-    return false;
-  }
-  return (value as { candidates: unknown[] }).candidates.every((candidate) => (
-    typeof candidate === "object" &&
-    candidate !== null &&
-    typeof (candidate as { url?: unknown }).url === "string" &&
-    (typeof (candidate as { title?: unknown }).title === "string" || (candidate as { title?: unknown }).title === null) &&
-    typeof (candidate as { content?: unknown }).content === "string" &&
-    (typeof (candidate as { retrievalScore?: unknown }).retrievalScore === "number" ||
-      (candidate as { retrievalScore?: unknown }).retrievalScore === null)
-  ));
-}
-
-function isEvidenceAnalysisResponse(
-  value: unknown,
-  candidateCount: number,
-): value is { classifications: EvidenceClassification[] } {
-  if (
-    typeof value !== "object" ||
-    value === null ||
-    !Array.isArray((value as { classifications?: unknown }).classifications)
-  ) return false;
-
-  const classifications = (value as { classifications: unknown[] }).classifications;
-  if (classifications.length !== candidateCount) return false;
-  const indices = new Set<number>();
-  for (const classification of classifications) {
-    if (typeof classification !== "object" || classification === null) return false;
-    const item = classification as Record<string, unknown>;
-    if (
-      !Number.isInteger(item.candidateIndex) ||
-      Number(item.candidateIndex) < 0 ||
-      Number(item.candidateIndex) >= candidateCount ||
-      indices.has(Number(item.candidateIndex)) ||
-      !["supports", "contradicts", "context", "irrelevant"].includes(String(item.relation)) ||
-      typeof item.reason !== "string" ||
-      !item.reason.trim() ||
-      item.reason.length > 300
-    ) return false;
-    indices.add(Number(item.candidateIndex));
-  }
-  return indices.size === candidateCount;
-}
-
-function relationLabel(relation: EvidenceRelation): string {
-  if (relation === "supports") return "Wspiera";
-  if (relation === "contradicts") return "Podważa";
-  if (relation === "context") return "Kontekst";
-  return "Nieistotny";
-}
-
 function unresolvedMessage(reason: UnresolvedReason): string {
   if (reason === "insufficient_content") {
     return "Materiał nie zawiera wystarczającej treści do wyodrębnienia twierdzenia.";
@@ -137,6 +89,15 @@ export default function Home() {
   const [technicalError, setTechnicalError] = useState("");
   const [evidenceState, setEvidenceState] = useState<EvidenceState>("idle");
   const [evidenceCandidates, setEvidenceCandidates] = useState<AnalyzedEvidenceCandidate[]>([]);
+  const [synthesis, setSynthesis] = useState<EvidenceSynthesisResult | null>(null);
+  const [synthesisError, setSynthesisError] = useState<EvidenceSynthesisErrorCode | null>(null);
+
+  function resetEvidenceResult() {
+    setEvidenceState("idle");
+    setEvidenceCandidates([]);
+    setSynthesis(null);
+    setSynthesisError(null);
+  }
 
   async function requestClaim(attempt: number, previousRejectedClaims: string[]) {
     setRequestState("loading");
@@ -194,8 +155,7 @@ export default function Home() {
     setAcceptedClaim("");
     setRejectedClaims([]);
     setUnresolvedReason(null);
-    setEvidenceState("idle");
-    setEvidenceCandidates([]);
+    resetEvidenceResult();
     await requestClaim(1, []);
   }
 
@@ -205,67 +165,22 @@ export default function Home() {
     setAcceptedClaim(result.claim);
     setPendingClaim(null);
     setRequestState("idle");
-    setEvidenceState("idle");
-    setEvidenceCandidates([]);
+    resetEvidenceResult();
   }
 
   async function handleStartAnalysis() {
     if (!acceptedClaim || evidenceState === "loading") return;
     setEvidenceState("loading");
     setEvidenceCandidates([]);
+    setSynthesis(null);
+    setSynthesisError(null);
 
     try {
-      const response = await fetch("/api/evidence", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ claim: acceptedClaim }),
-      });
-      let payload: unknown;
-      try {
-        payload = await response.json();
-      } catch {
-        setEvidenceState("error");
-        return;
-      }
-
-      if (response.ok && isEvidenceResponse(payload)) {
-        const candidates = payload.candidates.slice(0, 5);
-        if (candidates.length === 0) {
-          setEvidenceState("success");
-          return;
-        }
-
-        const analysisResponse = await fetch("/api/evidence/analyze", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ claim: acceptedClaim, candidates }),
-        });
-        let analysisPayload: unknown;
-        try {
-          analysisPayload = await analysisResponse.json();
-        } catch {
-          setEvidenceState("error");
-          return;
-        }
-        if (!analysisResponse.ok || !isEvidenceAnalysisResponse(analysisPayload, candidates.length)) {
-          setEvidenceState("error");
-          return;
-        }
-
-        const classifications = new Map(
-          analysisPayload.classifications.map((classification) => [
-            classification.candidateIndex,
-            classification,
-          ]),
-        );
-        setEvidenceCandidates(candidates.map((candidate, candidateIndex) => ({
-          ...candidate,
-          ...classifications.get(candidateIndex)!,
-        })));
-        setEvidenceState("success");
-        return;
-      }
-      setEvidenceState("error");
+      const result = await runEvidenceFlow(acceptedClaim);
+      setEvidenceCandidates(result.evidenceCandidates);
+      setSynthesis(result.synthesis);
+      setSynthesisError(result.synthesisError);
+      setEvidenceState("success");
     } catch {
       setEvidenceState("error");
     }
@@ -294,8 +209,7 @@ export default function Home() {
     setUnresolvedReason(null);
     setInputError("");
     setTechnicalError("");
-    setEvidenceState("idle");
-    setEvidenceCandidates([]);
+    resetEvidenceResult();
   }
 
   return (
@@ -419,6 +333,21 @@ export default function Home() {
                   ) : (
                     <p>Wyszukiwanie zakończyło się poprawnie, ale nie znaleziono użytecznych materiałów.</p>
                   )}
+                  {synthesis || synthesisError ? (
+                    <section className={styles.synthesisSection} aria-labelledby="synthesis-title">
+                      <h4 id="synthesis-title">Łączny obraz dowodów</h4>
+                      {synthesis ? (
+                        <>
+                          <strong>{overallPatternLabels[synthesis.overallPattern]}</strong>
+                          <p>{synthesis.summary}</p>
+                        </>
+                      ) : (
+                        <p className={styles.technicalError} role="alert">
+                          {synthesisErrorMessages[synthesisError!]}
+                        </p>
+                      )}
+                    </section>
+                  ) : null}
                 </div>
               ) : null}
               {evidenceState === "error" ? (

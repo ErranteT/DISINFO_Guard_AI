@@ -523,3 +523,27 @@ Utrzymuje backendową własność reguł domenowych, ogranicza rolę LLM do synt
 - claim, content i reason są niezaufanymi danymi, a output modelu jest niezależnie walidowany;
 - drugi invalid output daje `invalid_model_output`, a błąd techniczny providera daje `llm_provider_error`;
 - frontend, pełny flow, verdict, confidence, scoring, persistence i `run` pozostają poza tym zadaniem.
+
+---
+
+## D-025 — Frontend kontynuuje Evidence Flow do syntezy bez osobnego etapu UX
+
+### Kontekst
+
+Drugie zadanie etapu 08 podłącza istniejący Evidence Synthesizer do bieżącego frontendowego flow bez implementowania finalnego fact-checkingu.
+
+### Wybrane rozwiązanie
+
+Po poprawnym retrieval frontend automatycznie kontynuuje do Evidence Analysis dla 1–5 candidates, a następnie do `POST /api/evidence/synthesize`. Dla pustej listy pomija Analysis i wywołuje ten sam Synthesizer z `analyzedEvidence: []`. Stan oczekiwania trwa do zakończenia syntezy, a jej wynik jest renderowany pod listą evidence.
+
+### Główny powód
+
+Zachowuje rozdzielone kontrakty Retrieval, Analysis i Synthesis, wykorzystuje backend jako źródło `overallPattern` oraz nie wprowadza przedwcześnie pełnego orkiestratora ani nowej maszyny stanów.
+
+### Konsekwencje
+
+- `analyzedEvidence` powstaje wyłącznie dla requestu po mapowaniu classifications do candidates przez `candidateIndex` i zawiera tylko `content`, `relation` i `reason`;
+- pięć wartości `overallPattern` ma wyłącznie prezentacyjne polskie etykiety, bez verdictu, scoringu i confidence;
+- błąd Synthesis nie ukrywa poprawnie przeanalizowanych evidence i nie powoduje frontendowego retry;
+- instrukcja Synthesizera wymaga polskiego `summary`;
+- finalny fact-checking, persistence, Supabase i `run` pozostają poza tym zadaniem.

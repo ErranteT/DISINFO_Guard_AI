@@ -10,16 +10,16 @@ Dokument nie oznacza, że wszystkie opisane elementy zostały już zaimplementow
 
 ## Stan obecny
 
-Projekt posiada pionowy wycinek bezpiecznego przygotowania materiału z URL, Claim Flow, retrieval materiałów i Evidence Analysis oraz osobny backendowy Evidence Synthesizer:
+Projekt posiada pionowy wycinek bezpiecznego przygotowania materiału z URL, Claim Flow, retrieval materiałów, Evidence Analysis i Evidence Synthesis:
 
 - działa Tavily Search i backendowa normalizacja evidence candidates;
 - działa Evidence Analyst klasyfikujący relację każdego candidate do zaakceptowanego claimu;
-- działa osobny `POST /api/evidence/synthesize`, który wylicza profil relacji i generuje krótkie summary, ale nie jest jeszcze podłączony do frontendu ani pełnego flow;
+- frontend automatycznie wywołuje `POST /api/evidence/synthesize` po poprawnym Evidence Analysis albo bezpośrednio po pustym wyniku retrieval;
 - Supabase nie jest jeszcze zintegrowany;
 - Tavily jest zintegrowane wyłącznie przez `POST /api/evidence`;
 - Claim Extractor jest podłączony do jednego modelu LLM przez Groq;
 - działa endpoint `POST /api/prepare`;
-- działa kontrolowane pobieranie HTML/plain text, ekstrakcja jednego claimu, decyzja Accept/Reject oraz ręcznie uruchamiane wyszukiwanie i analiza materiałów, bez zapisu analiz;
+- działa kontrolowane pobieranie HTML/plain text, ekstrakcja jednego claimu, decyzja Accept/Reject oraz ręcznie uruchamiane wyszukiwanie, analiza i synteza materiałów, bez zapisu analiz;
 - deployment produkcyjny nie został jeszcze wykonany.
 
 ## Docelowy stack Course MVP
@@ -115,7 +115,7 @@ Claim Extractor korzysta z backendowego `GROQ_API_KEY`, natywnego `fetch`, `POST
 
 Licznik prób i lista odrzuconych claimów żyją w stanie frontendu. Backend waliduje format i zakres `attempt` 1–3, lecz bez trwałego lub podpisanego stanu limit nie jest security boundary odporną na ręczne manipulowanie requestem. Accept daje lokalne potwierdzenie i udostępnia CTA „Rozpocznij analizę”; retrieval nie uruchamia się automatycznie. `run`, Supabase i trwały zapis nadal nie istnieją w tym wycinku.
 
-## Zaimplementowany wycinek: `evidence` / Tavily Search / Evidence Analysis
+## Zaimplementowany wycinek: `evidence` / Tavily Search / Evidence Analysis / Evidence Synthesis
 
 ```text
 accepted claim
@@ -132,7 +132,9 @@ normalizacja maksymalnie 5 wyników
     ↓
 { candidates: [{ url, title, content, retrievalScore }] }
     ↓
-POST /api/evidence/analyze z { claim, candidates }
+candidates: [] ─────────────────────────────────────────────┐
+    ↓                                                       │
+1–5 candidates: POST /api/evidence/analyze                  │
     ↓
 Groq `openai/gpt-oss-20b`: tylko claim oraz candidateIndex + content
     ↓
@@ -140,9 +142,15 @@ backendowa walidacja structured output
     ↓
 { classifications: [{ candidateIndex, relation, reason }] }
     ↓
-UI: relation + reason dla właściwego candidate
+mapowanie po candidateIndex i requestowe { content, relation, reason }
+    ↓                                                       │
+POST /api/evidence/synthesize ← analyzedEvidence: [] ───────┘
     ↓
-STOP
+{ overallPattern, summary }
+    ↓
+UI: lista evidence, a pod nią „Łączny obraz dowodów”
+    ↓
+STOP — bez finalnego verdictu
 ```
 
 Route Handler jest cienką warstwą HTTP. Mały moduł `lib/evidence-retrieval.ts` buduje stały request Tavily, wykonuje natywny backendowy `fetch`, mapuje kontrolowane błędy i normalizuje odpowiedź bez użycia LLM. Query zawiera wyłącznie zaakceptowany claim. Search używa `basic`, `general`, `max_results: 5` oraz wyłącza answer, raw content i obrazy.
@@ -151,7 +159,7 @@ Wynik bez poprawnego URL albo użytecznego content jest pomijany. Niepoprawny ti
 
 `TAVILY_API_KEY` jest backend-only i trafia wyłącznie do nagłówka Authorization requestu serwerowego. Dla 1–5 candidates osobny Route Handler wykonuje jedno początkowe wywołanie Evidence Analysta dla całej listy. Groq otrzymuje tylko zaakceptowany claim oraz indeks i content każdego candidate; URL, title i `retrievalScore` nie opuszczają kontrolowanej części backendu. Dozwolone relacje to wyłącznie `supports`, `contradicts`, `context` i `irrelevant`. Backend wymaga dokładnego pokrycia indeksów oraz niepustego `reason` do 300 znaków. Invalid structured output otrzymuje maksymalnie jeden retry, a błąd techniczny providera nie jest ponawiany ani zamieniany w poprawną klasyfikację. Pusta lista kończy się wynikiem `{ "classifications": [] }` bez wywołania Groq.
 
-## Zaimplementowany backend: Evidence Synthesis
+## Zaimplementowana integracja: Evidence Synthesis
 
 ```text
 accepted claim + 0–5 analyzed evidence { content, relation, reason }
@@ -168,14 +176,16 @@ backendowa walidacja summary i maksymalnie jeden retry po invalid output
     ↓
 { overallPattern, summary }
     ↓
-STOP — bez integracji frontendowej i finalnego verdictu
+frontend: etykieta overallPattern + summary pod listą evidence
+    ↓
+STOP — bez finalnego verdictu
 ```
 
-Endpoint przyjmuje wyłącznie `claim` i `analyzedEvidence`; każdy element analyzed evidence zawiera `content`, ustalone wcześniej `relation` oraz `reason`. `retrievalScore` nie jest częścią tego kontraktu i nie trafia do modelu. Backend wylicza `supports_only`, `contradicts_only`, `mixed`, `context_only` albo `no_evidence` bez udziału LLM. Groq `openai/gpt-oss-20b` generuje wyłącznie `summary`; strict JSON Schema jest uzupełnione niezależną walidacją stringa niepustego po trim i nie dłuższego niż 500 znaków.
+Endpoint przyjmuje wyłącznie `claim` i `analyzedEvidence`; każdy element analyzed evidence zawiera `content`, ustalone wcześniej `relation` oraz `reason`. `retrievalScore`, URL i title nie są częścią tego kontraktu. Backend wylicza `supports_only`, `contradicts_only`, `mixed`, `context_only` albo `no_evidence` bez udziału LLM. Groq `openai/gpt-oss-20b` generuje wyłącznie polskie `summary`; strict JSON Schema jest uzupełnione niezależną walidacją stringa niepustego po trim i nie dłuższego niż 500 znaków.
 
 Claim, content i reason są przekazywane jako niezaufane dane w osobnej wiadomości, a relacje nie mogą być zmieniane ani ponownie klasyfikowane. Pierwszy invalid model output uruchamia dokładnie jeden retry, drugi kończy się `invalid_model_output`. Błąd konfiguracji, sieci, timeoutu, API, autoryzacji lub dostępności providera kończy się `llm_provider_error` bez retry przeznaczonego dla invalid output. Pusta lista jest poprawnym stanem domenowym i zwraca `no_evidence` ze stałym summary bez wywołania Groq.
 
-Aktualna granica backendu kończy się na osobnym `accepted claim + analyzed evidence` → Evidence Synthesis → `overallPattern + summary`. Frontend nadal kończy flow na Evidence Analysis. Ocena jakości źródeł, finalny fact-checking, verdict oraz integracja Synthesizera z pełnym flow nie są jeszcze zaimplementowane.
+Frontend utrzymuje istniejący stan oczekiwania do zakończenia Synthesizera i dopiero wtedy pokazuje evidence razem z syntezą. Dla pustego retrieval wysyła do tego samego endpointu `analyzedEvidence: []`, więc `no_evidence` pozostaje wynikiem backendowym. Błąd Synthesis jest pokazywany w sekcji syntezy i nie usuwa poprawnego wyniku Analysis; frontend nie ponawia requestu. Ocena jakości źródeł, finalny fact-checking i verdict nie są jeszcze zaimplementowane.
 
 ## Docelowy główny przepływ Course MVP
 
