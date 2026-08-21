@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useRef, useState } from "react";
 import { acceptClaim, rejectClaim, type PendingClaim } from "@/lib/claim-review";
 import {
   overallPatternLabels,
@@ -78,6 +78,7 @@ function unresolvedMessage(reason: UnresolvedReason): string {
 }
 
 export default function Home() {
+  const evidenceRunIdRef = useRef(0);
   const [showForm, setShowForm] = useState(false);
   const [url, setUrl] = useState("");
   const [requestState, setRequestState] = useState<RequestState>("idle");
@@ -93,6 +94,7 @@ export default function Home() {
   const [synthesisError, setSynthesisError] = useState<EvidenceSynthesisErrorCode | null>(null);
 
   function resetEvidenceResult() {
+    evidenceRunIdRef.current += 1;
     setEvidenceState("idle");
     setEvidenceCandidates([]);
     setSynthesis(null);
@@ -170,18 +172,23 @@ export default function Home() {
 
   async function handleStartAnalysis() {
     if (!acceptedClaim || evidenceState === "loading") return;
+    const runId = evidenceRunIdRef.current + 1;
+    evidenceRunIdRef.current = runId;
+    const isActive = () => evidenceRunIdRef.current === runId;
     setEvidenceState("loading");
     setEvidenceCandidates([]);
     setSynthesis(null);
     setSynthesisError(null);
 
     try {
-      const result = await runEvidenceFlow(acceptedClaim);
+      const result = await runEvidenceFlow(acceptedClaim, fetch, isActive);
+      if (!isActive()) return;
       setEvidenceCandidates(result.evidenceCandidates);
       setSynthesis(result.synthesis);
       setSynthesisError(result.synthesisError);
       setEvidenceState("success");
     } catch {
+      if (!isActive()) return;
       setEvidenceState("error");
     }
   }

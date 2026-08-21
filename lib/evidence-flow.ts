@@ -146,6 +146,7 @@ async function requestSynthesis(
 export async function runEvidenceFlow(
   claim: string,
   request: typeof fetch = fetch,
+  isActive: () => boolean = () => true,
 ): Promise<EvidenceFlowResult> {
   const retrievalResponse = await request("/api/evidence", {
     method: "POST",
@@ -153,11 +154,13 @@ export async function runEvidenceFlow(
     body: JSON.stringify({ claim }),
   });
   const retrievalPayload = await readJson(retrievalResponse);
+  if (!isActive()) throw new EvidenceFlowError();
   if (!retrievalResponse.ok || !isEvidenceResponse(retrievalPayload)) throw new EvidenceFlowError();
 
   const candidates = retrievalPayload.candidates.slice(0, 5);
   if (candidates.length === 0) {
     const synthesisResult = await requestSynthesis(claim, [], request);
+    if (!isActive()) throw new EvidenceFlowError();
     return { evidenceCandidates: [], ...synthesisResult };
   }
 
@@ -167,6 +170,7 @@ export async function runEvidenceFlow(
     body: JSON.stringify({ claim, candidates }),
   });
   const analysisPayload = await readJson(analysisResponse);
+  if (!isActive()) throw new EvidenceFlowError();
   if (!analysisResponse.ok || !isEvidenceAnalysisResponse(analysisPayload, candidates.length)) {
     throw new EvidenceFlowError();
   }
@@ -182,6 +186,7 @@ export async function runEvidenceFlow(
     ...classifications.get(candidateIndex)!,
   }));
   const synthesisResult = await requestSynthesis(claim, evidenceCandidates, request);
+  if (!isActive()) throw new EvidenceFlowError();
   return { evidenceCandidates, ...synthesisResult };
 }
 
