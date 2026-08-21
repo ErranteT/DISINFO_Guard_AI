@@ -499,3 +499,27 @@ Oddziela retrieval od interpretacji, nie pozwala technicznemu `retrievalScore` w
 - pusta lista candidates zwraca `{ "classifications": [] }` bez wywołania Groq;
 - UI mapuje klasyfikacje po `candidateIndex` i pokazuje relację z uzasadnieniem;
 - synteza, verdict, confidence, scoring, persistence i pełny `run` pozostają poza etapem 07.
+
+---
+
+## D-024 — Evidence Synthesizer rozdziela deterministyczny profil od modelowego summary
+
+### Kontekst
+
+Pierwsze zadanie etapu 08 ma połączyć wyniki Evidence Analysta bez implementowania finalnego fact-checkingu, verdictu ani integracji frontendowej.
+
+### Wybrane rozwiązanie
+
+Osobny `POST /api/evidence/synthesize` przyjmuje zaakceptowany claim i 0–5 elementów `{ content, relation, reason }`. Backend wylicza `overallPattern` wyłącznie z ustalonych relacji. Dla niepustej listy jedno wywołanie Groq `openai/gpt-oss-20b` generuje wyłącznie `summary`; invalid structured output ma dokładnie jeden retry, a provider error nie jest ponawiany. Pusta lista zwraca deterministyczne `no_evidence` bez LLM.
+
+### Główny powód
+
+Utrzymuje backendową własność reguł domenowych, ogranicza rolę LLM do syntezy przekazanych danych i zachowuje mały, testowalny kontrakt etapu 08.
+
+### Konsekwencje
+
+- `overallPattern` ma wyłącznie wartości `supports_only`, `contradicts_only`, `mixed`, `context_only` i `no_evidence`;
+- model nie otrzymuje `retrievalScore` i nie może zmieniać istniejących relacji;
+- claim, content i reason są niezaufanymi danymi, a output modelu jest niezależnie walidowany;
+- drugi invalid output daje `invalid_model_output`, a błąd techniczny providera daje `llm_provider_error`;
+- frontend, pełny flow, verdict, confidence, scoring, persistence i `run` pozostają poza tym zadaniem.

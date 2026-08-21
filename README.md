@@ -61,7 +61,7 @@ Kluczowym elementem koncepcji pozostaje centralny radial hub z główną akcją 
 
 ## Stan projektu
 
-Pionowy wycinek frontend → backend obejmuje SAFE FETCH, Claim Flow, retrieval materiałów oraz klasyfikację relacji każdego materiału do zaakceptowanego twierdzenia. Centralny radial hub prowadzi do formularza URL, który wysyła `POST /api/prepare`. Backend waliduje adres, wykonuje SAFE FETCH, przygotowuje tekst i przekazuje maksymalnie pierwsze 15 000 znaków do Claim Extractora. Extractor używa Groq Cloud i modelu `openai/gpt-oss-20b`; jego structured output jest niezależnie walidowany przez backend.
+Pionowy wycinek frontend → backend obejmuje SAFE FETCH, Claim Flow, retrieval materiałów oraz klasyfikację relacji każdego materiału do zaakceptowanego twierdzenia. Backend udostępnia również osobny Evidence Synthesizer, który nie jest jeszcze podłączony do frontendu. Centralny radial hub prowadzi do formularza URL, który wysyła `POST /api/prepare`. Backend waliduje adres, wykonuje SAFE FETCH, przygotowuje tekst i przekazuje maksymalnie pierwsze 15 000 znaków do Claim Extractora. Extractor używa Groq Cloud i modelu `openai/gpt-oss-20b`; jego structured output jest niezależnie walidowany przez backend.
 
 Pierwszy request przyjmuje `{ "url": "https://example.com/article" }`. Retry po odrzuceniu przyjmuje dodatkowo `attempt` od 2 do 3 oraz `rejectedClaims`. Stan licznika żyje w frontendzie i nie jest zabezpieczeniem odpornym na ręczne manipulowanie requestem.
 
@@ -69,13 +69,15 @@ Poprawny claim zwraca `claim_pending` z jednym twierdzeniem i numerem próby. Po
 
 `POST /api/evidence` ponownie waliduje claim i wykonuje jeden backendowy Tavily Search z parametrami `basic`, `general`, maksymalnie 5 wyników oraz bez answer, raw content i obrazów. Wyniki są normalizowane do `url`, `title`, `content` i technicznego `retrievalScore`. Dla niepustej listy frontend wysyła claim i candidates do osobnego `POST /api/evidence/analyze`. Evidence Analyst otrzymuje wyłącznie claim oraz `candidateIndex` i `content`, po czym zwraca niezależnie walidowane `relation` i krótkie `reason` dla każdego materiału. UI pokazuje tytuł, link, fragment, relację i uzasadnienie. Poprawne wyszukiwanie bez użytecznych wyników zwraca `{ "candidates": [] }` i nie uruchamia Groq.
 
+Backendowy `POST /api/evidence/synthesize` przyjmuje zaakceptowany claim oraz 0–5 elementów `{ content, relation, reason }`. `overallPattern` jest wyliczany deterministycznie z istniejących relacji, a Groq generuje wyłącznie krótkie `summary`, walidowane niezależnie do 500 znaków. Pierwszy invalid model output otrzymuje dokładnie jeden retry; błąd providera nie jest ponawiany. Pusta lista zwraca `no_evidence` i stałe summary bez wywołania LLM. Endpoint nie jest jeszcze wywoływany przez UI ani pełny flow.
+
 Obsługiwane są wyłącznie odpowiedzi `text/html` i `text/plain` w UTF-8, bez kompresji transportowej. Pojedynczy request ma limit 10 sekund, body limit 2 MB, a łańcuch może zawierać maksymalnie 3 ręcznie walidowane redirecty. HTML jest parsowany przez `parse5`; usuwane są `script`, `style` i `noscript`, bez Readability i bez wyboru głównego artykułu.
 
 Użyte technologie w tym wycinku to Next.js, TypeScript, Route Handlers, `parse5` i natywny backendowy `fetch` do Groq oraz Tavily Search. Testy używają wbudowanego mechanizmu Node, mockują granice zewnętrznych usług i nie wymagają internetu ani kluczy API.
 
 Docelowa architektura Course MVP zakłada wykorzystanie Next.js, TypeScript, Route Handlers, Supabase, Tavily, jednego abstrahowanego LLM oraz Vercel.
 
-Aktualna granica produktu kończy się na `accepted claim` → Tavily Search → normalized evidence candidates → Evidence Analysis → `relation + reason` per candidate. Nie zaimplementowano jeszcze syntezy wielu źródeł, finalnego fact-checkingu, Supabase, właściwego `run`, końcowego wyniku ani zapisu historii analiz.
+Aktualna granica backendu kończy się na osobnym `accepted claim + analyzed evidence` → Evidence Synthesis → deterministyczny `overallPattern` + modelowe `summary`. Frontend nadal kończy flow na Evidence Analysis. Nie zaimplementowano jeszcze integracji Synthesizera z UI, finalnego fact-checkingu, Supabase, właściwego `run`, końcowego wyniku ani zapisu historii analiz.
 
 ## Uruchomienie lokalne
 

@@ -10,11 +10,11 @@ Dokument nie oznacza, że wszystkie opisane elementy zostały już zaimplementow
 
 ## Stan obecny
 
-Projekt posiada pionowy wycinek bezpiecznego przygotowania materiału z URL, Claim Flow, retrieval materiałów i Evidence Analysis:
+Projekt posiada pionowy wycinek bezpiecznego przygotowania materiału z URL, Claim Flow, retrieval materiałów i Evidence Analysis oraz osobny backendowy Evidence Synthesizer:
 
 - działa Tavily Search i backendowa normalizacja evidence candidates;
 - działa Evidence Analyst klasyfikujący relację każdego candidate do zaakceptowanego claimu;
-- nie działa jeszcze synteza wielu źródeł ani pipeline finalnego fact-checkingu;
+- działa osobny `POST /api/evidence/synthesize`, który wylicza profil relacji i generuje krótkie summary, ale nie jest jeszcze podłączony do frontendu ani pełnego flow;
 - Supabase nie jest jeszcze zintegrowany;
 - Tavily jest zintegrowane wyłącznie przez `POST /api/evidence`;
 - Claim Extractor jest podłączony do jednego modelu LLM przez Groq;
@@ -151,7 +151,31 @@ Wynik bez poprawnego URL albo użytecznego content jest pomijany. Niepoprawny ti
 
 `TAVILY_API_KEY` jest backend-only i trafia wyłącznie do nagłówka Authorization requestu serwerowego. Dla 1–5 candidates osobny Route Handler wykonuje jedno początkowe wywołanie Evidence Analysta dla całej listy. Groq otrzymuje tylko zaakceptowany claim oraz indeks i content każdego candidate; URL, title i `retrievalScore` nie opuszczają kontrolowanej części backendu. Dozwolone relacje to wyłącznie `supports`, `contradicts`, `context` i `irrelevant`. Backend wymaga dokładnego pokrycia indeksów oraz niepustego `reason` do 300 znaków. Invalid structured output otrzymuje maksymalnie jeden retry, a błąd techniczny providera nie jest ponawiany ani zamieniany w poprawną klasyfikację. Pusta lista kończy się wynikiem `{ "classifications": [] }` bez wywołania Groq.
 
-Aktualna granica produktu kończy się dokładnie na `accepted claim` → Evidence Retrieval → normalized candidates → Evidence Analysis → `relation + reason` per candidate. Synteza wielu źródeł, ocena jakości źródeł i finalny fact-checking nie są jeszcze zaimplementowane.
+## Zaimplementowany backend: Evidence Synthesis
+
+```text
+accepted claim + 0–5 analyzed evidence { content, relation, reason }
+    ↓
+POST /api/evidence/synthesize
+    ↓
+backend: deterministic overallPattern z istniejących relation
+    ↓
+brak evidence → no_evidence + stałe summary, bez Groq
+    ↓
+1–5 evidence → jedno początkowe wywołanie Groq po summary
+    ↓
+backendowa walidacja summary i maksymalnie jeden retry po invalid output
+    ↓
+{ overallPattern, summary }
+    ↓
+STOP — bez integracji frontendowej i finalnego verdictu
+```
+
+Endpoint przyjmuje wyłącznie `claim` i `analyzedEvidence`; każdy element analyzed evidence zawiera `content`, ustalone wcześniej `relation` oraz `reason`. `retrievalScore` nie jest częścią tego kontraktu i nie trafia do modelu. Backend wylicza `supports_only`, `contradicts_only`, `mixed`, `context_only` albo `no_evidence` bez udziału LLM. Groq `openai/gpt-oss-20b` generuje wyłącznie `summary`; strict JSON Schema jest uzupełnione niezależną walidacją stringa niepustego po trim i nie dłuższego niż 500 znaków.
+
+Claim, content i reason są przekazywane jako niezaufane dane w osobnej wiadomości, a relacje nie mogą być zmieniane ani ponownie klasyfikowane. Pierwszy invalid model output uruchamia dokładnie jeden retry, drugi kończy się `invalid_model_output`. Błąd konfiguracji, sieci, timeoutu, API, autoryzacji lub dostępności providera kończy się `llm_provider_error` bez retry przeznaczonego dla invalid output. Pusta lista jest poprawnym stanem domenowym i zwraca `no_evidence` ze stałym summary bez wywołania Groq.
+
+Aktualna granica backendu kończy się na osobnym `accepted claim + analyzed evidence` → Evidence Synthesis → `overallPattern + summary`. Frontend nadal kończy flow na Evidence Analysis. Ocena jakości źródeł, finalny fact-checking, verdict oraz integracja Synthesizera z pełnym flow nie są jeszcze zaimplementowane.
 
 ## Docelowy główny przepływ Course MVP
 
