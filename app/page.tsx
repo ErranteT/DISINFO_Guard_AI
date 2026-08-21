@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { acceptClaim, rejectClaim, type PendingClaim } from "@/lib/claim-review";
+import type { EvidenceCandidate } from "@/lib/evidence-retrieval";
 import styles from "./page.module.css";
 
 type RequestState =
@@ -12,9 +13,12 @@ type RequestState =
   | "error";
 
 type UnresolvedReason = "no_checkable_claim" | "insufficient_content" | "rejected_limit";
+type EvidenceState = "idle" | "loading" | "success" | "error";
 
 const technicalErrorMessage =
   "Nie udało się wyodrębnić twierdzenia. Spróbuj ponownie za chwilę.";
+const evidenceErrorMessage =
+  "Nie udało się wyszukać materiałów. Spróbuj ponownie za chwilę.";
 
 function isClaimPendingResponse(value: unknown): value is {
   status: "claim_pending"; claim: string; attempt: number;
@@ -56,6 +60,21 @@ function isControlledErrorResponse(
   );
 }
 
+function isEvidenceResponse(value: unknown): value is { candidates: EvidenceCandidate[] } {
+  if (typeof value !== "object" || value === null || !Array.isArray((value as { candidates?: unknown }).candidates)) {
+    return false;
+  }
+  return (value as { candidates: unknown[] }).candidates.every((candidate) => (
+    typeof candidate === "object" &&
+    candidate !== null &&
+    typeof (candidate as { url?: unknown }).url === "string" &&
+    (typeof (candidate as { title?: unknown }).title === "string" || (candidate as { title?: unknown }).title === null) &&
+    typeof (candidate as { content?: unknown }).content === "string" &&
+    (typeof (candidate as { retrievalScore?: unknown }).retrievalScore === "number" ||
+      (candidate as { retrievalScore?: unknown }).retrievalScore === null)
+  ));
+}
+
 function unresolvedMessage(reason: UnresolvedReason): string {
   if (reason === "insufficient_content") {
     return "Materiał nie zawiera wystarczającej treści do wyodrębnienia twierdzenia.";
@@ -76,6 +95,8 @@ export default function Home() {
   const [unresolvedReason, setUnresolvedReason] = useState<UnresolvedReason | null>(null);
   const [inputError, setInputError] = useState("");
   const [technicalError, setTechnicalError] = useState("");
+  const [evidenceState, setEvidenceState] = useState<EvidenceState>("idle");
+  const [evidenceCandidates, setEvidenceCandidates] = useState<EvidenceCandidate[]>([]);
 
   async function requestClaim(attempt: number, previousRejectedClaims: string[]) {
     setRequestState("loading");
@@ -133,6 +154,8 @@ export default function Home() {
     setAcceptedClaim("");
     setRejectedClaims([]);
     setUnresolvedReason(null);
+    setEvidenceState("idle");
+    setEvidenceCandidates([]);
     await requestClaim(1, []);
   }
 
@@ -142,6 +165,38 @@ export default function Home() {
     setAcceptedClaim(result.claim);
     setPendingClaim(null);
     setRequestState("idle");
+    setEvidenceState("idle");
+    setEvidenceCandidates([]);
+  }
+
+  async function handleStartAnalysis() {
+    if (!acceptedClaim || evidenceState === "loading") return;
+    setEvidenceState("loading");
+    setEvidenceCandidates([]);
+
+    try {
+      const response = await fetch("/api/evidence", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ claim: acceptedClaim }),
+      });
+      let payload: unknown;
+      try {
+        payload = await response.json();
+      } catch {
+        setEvidenceState("error");
+        return;
+      }
+
+      if (response.ok && isEvidenceResponse(payload)) {
+        setEvidenceCandidates(payload.candidates.slice(0, 5));
+        setEvidenceState("success");
+        return;
+      }
+      setEvidenceState("error");
+    } catch {
+      setEvidenceState("error");
+    }
   }
 
   async function handleReject() {
@@ -167,6 +222,8 @@ export default function Home() {
     setUnresolvedReason(null);
     setInputError("");
     setTechnicalError("");
+    setEvidenceState("idle");
+    setEvidenceCandidates([]);
   }
 
   return (
@@ -252,11 +309,46 @@ export default function Home() {
           ) : null}
 
           {acceptedClaim ? (
-            <div className={styles.successMessage} role="status">
-              <strong>Twierdzenie zaakceptowane.</strong>
-              <p>{acceptedClaim}</p>
-              <span>Jest gotowe do dalszej analizy, która zostanie dodana w kolejnym etapie.</span>
-            </div>
+            <section className={styles.evidenceSection} aria-labelledby="accepted-claim-title">
+              <div className={styles.successMessage} role="status">
+                <strong id="accepted-claim-title">Twierdzenie zaakceptowane.</strong>
+                <p>{acceptedClaim}</p>
+                <span>Możesz teraz wyszukać materiały dotyczące tego twierdzenia.</span>
+              </div>
+              <button
+                className={styles.analysisButton}
+                type="button"
+                onClick={handleStartAnalysis}
+                disabled={evidenceState === "loading"}
+              >
+                {evidenceState === "loading" ? "Wyszukuję materiały…" : "Rozpocznij analizę"}
+              </button>
+
+              {evidenceState === "success" ? (
+                <div className={styles.evidenceResults} role="status">
+                  <h3>Znalezione materiały</h3>
+                  <p>Znaleziono: {evidenceCandidates.length}</p>
+                  {evidenceCandidates.length ? (
+                    <ol>
+                      {evidenceCandidates.map((candidate) => (
+                        <li key={`${candidate.url}-${candidate.title ?? ""}`}>
+                          <a href={candidate.url} target="_blank" rel="noreferrer">
+                            {candidate.title ?? candidate.url}
+                          </a>
+                          {candidate.title ? <small>{candidate.url}</small> : null}
+                          <p>{candidate.content}</p>
+                        </li>
+                      ))}
+                    </ol>
+                  ) : (
+                    <p>Wyszukiwanie zakończyło się poprawnie, ale nie znaleziono użytecznych materiałów.</p>
+                  )}
+                </div>
+              ) : null}
+              {evidenceState === "error" ? (
+                <p className={styles.technicalError} role="alert">{evidenceErrorMessage}</p>
+              ) : null}
+            </section>
           ) : null}
 
           {requestState === "claim_unresolved" && unresolvedReason ? (

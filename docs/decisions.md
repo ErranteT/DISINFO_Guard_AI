@@ -450,3 +450,27 @@ Zapewnia mały, testowalny pion Claim Flow z jednym providerem i modelem, bez wp
 - identyczny odrzucony claim jest blokowany prostą normalizacją tekstową;
 - limit prób nie jest security boundary odporną na ręczne manipulowanie requestem;
 - Tavily, evidence, `run`, finalny fact-check i Supabase pozostają poza tym etapem.
+
+---
+
+## D-022 — Evidence retrieval używa wyłącznie Tavily Search i backendowej normalizacji
+
+### Kontekst
+
+Etap 06 ma pozyskać rzeczywiste materiały dla zaakceptowanego claimu, ale kończy się przed ich interpretacją i finalnym fact-checkingiem.
+
+### Wybrane rozwiązanie
+
+Po ręcznym CTA backendowy `POST /api/evidence` ponownie waliduje claim i wykonuje natywnym `fetch` jeden `POST https://api.tavily.com/search`. Query jest wyłącznie zaakceptowany claim, a parametry Search są stałe: `basic`, `general`, maksymalnie 5 wyników, bez answer, raw content i obrazów. Backend normalizuje wyniki do `url`, `title`, `content` i `retrievalScore`.
+
+### Główny powód
+
+Zapewnia mały, audytowalny i testowalny etap retrieval bez Tavily Extract, SDK, LLM, warstwy multi-provider ani przedwczesnej analizy dowodów.
+
+### Konsekwencje
+
+- `TAVILY_API_KEY` jest wyłącznie backendową zmienną środowiskową;
+- poprawna odpowiedź bez użytecznych wyników zwraca `{ "candidates": [] }`;
+- błędy techniczne providera nie są zamieniane na pustą listę;
+- `retrievalScore` oznacza tylko dopasowanie wyszukiwarki i nie jest scoringiem wiarygodności;
+- Evidence Analyst, relacje supports/contradicts/context, `insufficient_data` i finalny fact-check pozostają poza etapem 06.

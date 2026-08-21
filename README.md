@@ -61,19 +61,21 @@ Kluczowym elementem koncepcji pozostaje centralny radial hub z główną akcją 
 
 ## Stan projektu
 
-Pionowy wycinek frontend → backend obejmuje SAFE FETCH oraz Claim Flow. Centralny radial hub prowadzi do formularza URL, który wysyła `POST /api/prepare`. Backend waliduje adres, wykonuje SAFE FETCH, przygotowuje tekst i przekazuje maksymalnie pierwsze 15 000 znaków do Claim Extractora. Extractor używa Groq Cloud i modelu `openai/gpt-oss-20b`; jego structured output jest niezależnie walidowany przez backend.
+Pionowy wycinek frontend → backend obejmuje SAFE FETCH, Claim Flow oraz retrieval materiałów. Centralny radial hub prowadzi do formularza URL, który wysyła `POST /api/prepare`. Backend waliduje adres, wykonuje SAFE FETCH, przygotowuje tekst i przekazuje maksymalnie pierwsze 15 000 znaków do Claim Extractora. Extractor używa Groq Cloud i modelu `openai/gpt-oss-20b`; jego structured output jest niezależnie walidowany przez backend.
 
 Pierwszy request przyjmuje `{ "url": "https://example.com/article" }`. Retry po odrzuceniu przyjmuje dodatkowo `attempt` od 2 do 3 oraz `rejectedClaims`. Stan licznika żyje w frontendzie i nie jest zabezpieczeniem odpornym na ręczne manipulowanie requestem.
 
-Poprawny claim zwraca `claim_pending` z jednym twierdzeniem i numerem próby. Poprawny wynik `no_claim` natychmiast zwraca `claim_unresolved`. Frontend pozwala zaakceptować claim lub odrzucić go; maksymalnie trzecie odrzucenie kończy Claim Flow jako `claim_unresolved`. Accept nie uruchamia jeszcze dalszej analizy i nie tworzy nowego statusu API.
+Poprawny claim zwraca `claim_pending` z jednym twierdzeniem i numerem próby. Poprawny wynik `no_claim` natychmiast zwraca `claim_unresolved`. Frontend pozwala zaakceptować claim lub odrzucić go; maksymalnie trzecie odrzucenie kończy Claim Flow jako `claim_unresolved`. Accept nie uruchamia retrieval automatycznie. Po zaakceptowaniu użytkownik może wybrać „Rozpocznij analizę”, co wysyła `{ "claim": "..." }` do `POST /api/evidence`.
+
+`POST /api/evidence` ponownie waliduje claim i wykonuje jeden backendowy Tavily Search z parametrami `basic`, `general`, maksymalnie 5 wyników oraz bez answer, raw content i obrazów. Wyniki są normalizowane do `url`, `title`, `content` i technicznego `retrievalScore`; UI pokazuje wyłącznie tytuł, link i krótki fragment. Poprawne wyszukiwanie bez użytecznych wyników zwraca `{ "candidates": [] }`, natomiast błędy techniczne providera pozostają kontrolowanymi błędami.
 
 Obsługiwane są wyłącznie odpowiedzi `text/html` i `text/plain` w UTF-8, bez kompresji transportowej. Pojedynczy request ma limit 10 sekund, body limit 2 MB, a łańcuch może zawierać maksymalnie 3 ręcznie walidowane redirecty. HTML jest parsowany przez `parse5`; usuwane są `script`, `style` i `noscript`, bez Readability i bez wyboru głównego artykułu.
 
-Użyte technologie w tym wycinku to Next.js, TypeScript, Route Handlers, `parse5` i natywny backendowy `fetch` do zgodnego z OpenAI endpointu Groq. Testy używają wbudowanego mechanizmu Node, mockują granicę LLM i nie wymagają internetu ani `GROQ_API_KEY`.
+Użyte technologie w tym wycinku to Next.js, TypeScript, Route Handlers, `parse5` i natywny backendowy `fetch` do Groq oraz Tavily Search. Testy używają wbudowanego mechanizmu Node, mockują granice zewnętrznych usług i nie wymagają internetu ani kluczy API.
 
 Docelowa architektura Course MVP zakłada wykorzystanie Next.js, TypeScript, Route Handlers, Supabase, Tavily, jednego abstrahowanego LLM oraz Vercel.
 
-Nie zaimplementowano jeszcze Tavily, Supabase, wyszukiwania źródeł, analizy dowodów, właściwego `run`, końcowego wyniku ani zapisu historii analiz.
+Aktualna granica produktu kończy się na `accepted claim` → Tavily Search → normalized evidence candidates. Nie zaimplementowano jeszcze Evidence Analysta, finalnego fact-checkingu, Supabase, właściwego `run`, końcowego wyniku ani zapisu historii analiz.
 
 ## Uruchomienie lokalne
 
