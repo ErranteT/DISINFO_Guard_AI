@@ -10,15 +10,16 @@ Dokument nie oznacza, że wszystkie opisane elementy zostały już zaimplementow
 
 ## Stan obecny
 
-Projekt posiada pionowy wycinek bezpiecznego przygotowania materiału z URL, Claim Flow i retrieval materiałów:
+Projekt posiada pionowy wycinek bezpiecznego przygotowania materiału z URL, Claim Flow, retrieval materiałów i Evidence Analysis:
 
 - działa Tavily Search i backendowa normalizacja evidence candidates;
-- nie działa jeszcze Evidence Analyst ani pipeline finalnego fact-checkingu;
+- działa Evidence Analyst klasyfikujący relację każdego candidate do zaakceptowanego claimu;
+- nie działa jeszcze synteza wielu źródeł ani pipeline finalnego fact-checkingu;
 - Supabase nie jest jeszcze zintegrowany;
 - Tavily jest zintegrowane wyłącznie przez `POST /api/evidence`;
 - Claim Extractor jest podłączony do jednego modelu LLM przez Groq;
 - działa endpoint `POST /api/prepare`;
-- działa kontrolowane pobieranie HTML/plain text, ekstrakcja jednego claimu, decyzja Accept/Reject i ręcznie uruchamiane wyszukiwanie materiałów, bez zapisu analiz;
+- działa kontrolowane pobieranie HTML/plain text, ekstrakcja jednego claimu, decyzja Accept/Reject oraz ręcznie uruchamiane wyszukiwanie i analiza materiałów, bez zapisu analiz;
 - deployment produkcyjny nie został jeszcze wykonany.
 
 ## Docelowy stack Course MVP
@@ -114,7 +115,7 @@ Claim Extractor korzysta z backendowego `GROQ_API_KEY`, natywnego `fetch`, `POST
 
 Licznik prób i lista odrzuconych claimów żyją w stanie frontendu. Backend waliduje format i zakres `attempt` 1–3, lecz bez trwałego lub podpisanego stanu limit nie jest security boundary odporną na ręczne manipulowanie requestem. Accept daje lokalne potwierdzenie i udostępnia CTA „Rozpocznij analizę”; retrieval nie uruchamia się automatycznie. `run`, Supabase i trwały zapis nadal nie istnieją w tym wycinku.
 
-## Zaimplementowany wycinek: `evidence` / Tavily Search
+## Zaimplementowany wycinek: `evidence` / Tavily Search / Evidence Analysis
 
 ```text
 accepted claim
@@ -130,13 +131,27 @@ POST https://api.tavily.com/search
 normalizacja maksymalnie 5 wyników
     ↓
 { candidates: [{ url, title, content, retrievalScore }] }
+    ↓
+POST /api/evidence/analyze z { claim, candidates }
+    ↓
+Groq `openai/gpt-oss-20b`: tylko claim oraz candidateIndex + content
+    ↓
+backendowa walidacja structured output
+    ↓
+{ classifications: [{ candidateIndex, relation, reason }] }
+    ↓
+UI: relation + reason dla właściwego candidate
+    ↓
+STOP
 ```
 
 Route Handler jest cienką warstwą HTTP. Mały moduł `lib/evidence-retrieval.ts` buduje stały request Tavily, wykonuje natywny backendowy `fetch`, mapuje kontrolowane błędy i normalizuje odpowiedź bez użycia LLM. Query zawiera wyłącznie zaakceptowany claim. Search używa `basic`, `general`, `max_results: 5` oraz wyłącza answer, raw content i obrazy.
 
 Wynik bez poprawnego URL albo użytecznego content jest pomijany. Niepoprawny title i score stają się `null`; score jest nazwany `retrievalScore` i pozostaje technicznym wynikiem dopasowania wyszukiwarki, niewidocznym w UI. Poprawna odpowiedź bez candidates jest sukcesem `{ "candidates": [] }`. Błędy konfiguracji, timeout, autoryzacji, rate limit, sieci, providera i formatu odpowiedzi nie są zamieniane na pustą listę.
 
-`TAVILY_API_KEY` jest backend-only i trafia wyłącznie do nagłówka Authorization requestu serwerowego. Aktualna granica produktu kończy się dokładnie na `accepted claim` → Tavily Search → normalized evidence candidates. Evidence Analyst, klasyfikacja relacji, ocena jakości źródeł i finalny fact-checking nie są jeszcze zaimplementowane.
+`TAVILY_API_KEY` jest backend-only i trafia wyłącznie do nagłówka Authorization requestu serwerowego. Dla 1–5 candidates osobny Route Handler wykonuje jedno początkowe wywołanie Evidence Analysta dla całej listy. Groq otrzymuje tylko zaakceptowany claim oraz indeks i content każdego candidate; URL, title i `retrievalScore` nie opuszczają kontrolowanej części backendu. Dozwolone relacje to wyłącznie `supports`, `contradicts`, `context` i `irrelevant`. Backend wymaga dokładnego pokrycia indeksów oraz niepustego `reason` do 300 znaków. Invalid structured output otrzymuje maksymalnie jeden retry, a błąd techniczny providera nie jest ponawiany ani zamieniany w poprawną klasyfikację. Pusta lista kończy się wynikiem `{ "classifications": [] }` bez wywołania Groq.
+
+Aktualna granica produktu kończy się dokładnie na `accepted claim` → Evidence Retrieval → normalized candidates → Evidence Analysis → `relation + reason` per candidate. Synteza wielu źródeł, ocena jakości źródeł i finalny fact-checking nie są jeszcze zaimplementowane.
 
 ## Docelowy główny przepływ Course MVP
 

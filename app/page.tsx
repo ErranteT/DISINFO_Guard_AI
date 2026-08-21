@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { acceptClaim, rejectClaim, type PendingClaim } from "@/lib/claim-review";
+import type { EvidenceClassification, EvidenceRelation } from "@/lib/evidence-analysis";
 import type { EvidenceCandidate } from "@/lib/evidence-retrieval";
 import styles from "./page.module.css";
 
@@ -14,11 +15,12 @@ type RequestState =
 
 type UnresolvedReason = "no_checkable_claim" | "insufficient_content" | "rejected_limit";
 type EvidenceState = "idle" | "loading" | "success" | "error";
+type AnalyzedEvidenceCandidate = EvidenceCandidate & EvidenceClassification;
 
 const technicalErrorMessage =
   "Nie udało się wyodrębnić twierdzenia. Spróbuj ponownie za chwilę.";
 const evidenceErrorMessage =
-  "Nie udało się wyszukać materiałów. Spróbuj ponownie za chwilę.";
+  "Nie udało się wyszukać lub przeanalizować materiałów. Spróbuj ponownie za chwilę.";
 
 function isClaimPendingResponse(value: unknown): value is {
   status: "claim_pending"; claim: string; attempt: number;
@@ -75,6 +77,44 @@ function isEvidenceResponse(value: unknown): value is { candidates: EvidenceCand
   ));
 }
 
+function isEvidenceAnalysisResponse(
+  value: unknown,
+  candidateCount: number,
+): value is { classifications: EvidenceClassification[] } {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    !Array.isArray((value as { classifications?: unknown }).classifications)
+  ) return false;
+
+  const classifications = (value as { classifications: unknown[] }).classifications;
+  if (classifications.length !== candidateCount) return false;
+  const indices = new Set<number>();
+  for (const classification of classifications) {
+    if (typeof classification !== "object" || classification === null) return false;
+    const item = classification as Record<string, unknown>;
+    if (
+      !Number.isInteger(item.candidateIndex) ||
+      Number(item.candidateIndex) < 0 ||
+      Number(item.candidateIndex) >= candidateCount ||
+      indices.has(Number(item.candidateIndex)) ||
+      !["supports", "contradicts", "context", "irrelevant"].includes(String(item.relation)) ||
+      typeof item.reason !== "string" ||
+      !item.reason.trim() ||
+      item.reason.length > 300
+    ) return false;
+    indices.add(Number(item.candidateIndex));
+  }
+  return indices.size === candidateCount;
+}
+
+function relationLabel(relation: EvidenceRelation): string {
+  if (relation === "supports") return "Wspiera";
+  if (relation === "contradicts") return "Podważa";
+  if (relation === "context") return "Kontekst";
+  return "Nieistotny";
+}
+
 function unresolvedMessage(reason: UnresolvedReason): string {
   if (reason === "insufficient_content") {
     return "Materiał nie zawiera wystarczającej treści do wyodrębnienia twierdzenia.";
@@ -96,7 +136,7 @@ export default function Home() {
   const [inputError, setInputError] = useState("");
   const [technicalError, setTechnicalError] = useState("");
   const [evidenceState, setEvidenceState] = useState<EvidenceState>("idle");
-  const [evidenceCandidates, setEvidenceCandidates] = useState<EvidenceCandidate[]>([]);
+  const [evidenceCandidates, setEvidenceCandidates] = useState<AnalyzedEvidenceCandidate[]>([]);
 
   async function requestClaim(attempt: number, previousRejectedClaims: string[]) {
     setRequestState("loading");
@@ -189,7 +229,39 @@ export default function Home() {
       }
 
       if (response.ok && isEvidenceResponse(payload)) {
-        setEvidenceCandidates(payload.candidates.slice(0, 5));
+        const candidates = payload.candidates.slice(0, 5);
+        if (candidates.length === 0) {
+          setEvidenceState("success");
+          return;
+        }
+
+        const analysisResponse = await fetch("/api/evidence/analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ claim: acceptedClaim, candidates }),
+        });
+        let analysisPayload: unknown;
+        try {
+          analysisPayload = await analysisResponse.json();
+        } catch {
+          setEvidenceState("error");
+          return;
+        }
+        if (!analysisResponse.ok || !isEvidenceAnalysisResponse(analysisPayload, candidates.length)) {
+          setEvidenceState("error");
+          return;
+        }
+
+        const classifications = new Map(
+          analysisPayload.classifications.map((classification) => [
+            classification.candidateIndex,
+            classification,
+          ]),
+        );
+        setEvidenceCandidates(candidates.map((candidate, candidateIndex) => ({
+          ...candidate,
+          ...classifications.get(candidateIndex)!,
+        })));
         setEvidenceState("success");
         return;
       }
@@ -321,7 +393,7 @@ export default function Home() {
                 onClick={handleStartAnalysis}
                 disabled={evidenceState === "loading"}
               >
-                {evidenceState === "loading" ? "Wyszukuję materiały…" : "Rozpocznij analizę"}
+                {evidenceState === "loading" ? "Analizuję materiały…" : "Rozpocznij analizę"}
               </button>
 
               {evidenceState === "success" ? (
@@ -337,6 +409,10 @@ export default function Home() {
                           </a>
                           {candidate.title ? <small>{candidate.url}</small> : null}
                           <p>{candidate.content}</p>
+                          <div className={styles.evidenceRelation}>
+                            <strong>Relacja do twierdzenia: {relationLabel(candidate.relation)}</strong>
+                            <span>{candidate.reason}</span>
+                          </div>
                         </li>
                       ))}
                     </ol>

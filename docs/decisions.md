@@ -474,3 +474,28 @@ Zapewnia mały, audytowalny i testowalny etap retrieval bez Tavily Extract, SDK,
 - błędy techniczne providera nie są zamieniane na pustą listę;
 - `retrievalScore` oznacza tylko dopasowanie wyszukiwarki i nie jest scoringiem wiarygodności;
 - Evidence Analyst, relacje supports/contradicts/context, `insufficient_data` i finalny fact-check pozostają poza etapem 06.
+
+---
+
+## D-023 — Evidence Analyst klasyfikuje każdy candidate w jednym wywołaniu Groq
+
+### Kontekst
+
+Etap 07 ma określić relację każdego znormalizowanego evidence candidate do zaakceptowanego claimu, bez syntezy wielu źródeł i bez końcowego fact-checkingu.
+
+### Wybrane rozwiązanie
+
+Osobny `POST /api/evidence/analyze` przyjmuje zaakceptowany claim i 0–5 istniejących normalized candidates. Dla niepustej listy backend przekazuje w jednym requestcie do Groq Cloud, model `openai/gpt-oss-20b`, wyłącznie claim oraz `candidateIndex` i `content`. Model zwraca `supports`, `contradicts`, `context` albo `irrelevant` wraz z krótkim `reason` dla każdego indeksu. Strict JSON Schema jest uzupełnione niezależną walidacją backendową. Invalid structured output otrzymuje dokładnie jeden retry; błąd techniczny providera nie jest ponawiany.
+
+### Główny powód
+
+Oddziela retrieval od interpretacji, nie pozwala technicznemu `retrievalScore` wpływać na klasyfikację i utrzymuje mały, testowalny kontrakt bez przedwczesnej syntezy.
+
+### Konsekwencje
+
+- claim i `candidate.content` są niezaufanymi danymi i nie mogą sterować instrukcją Evidence Analysta;
+- URL, title i `retrievalScore` nie są przekazywane do LLM;
+- backend wymaga dokładnie jednej klasyfikacji dla każdego indeksu oraz `reason` do 300 znaków;
+- pusta lista candidates zwraca `{ "classifications": [] }` bez wywołania Groq;
+- UI mapuje klasyfikacje po `candidateIndex` i pokazuje relację z uzasadnieniem;
+- synteza, verdict, confidence, scoring, persistence i pełny `run` pozostają poza etapem 07.
