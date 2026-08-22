@@ -20,7 +20,7 @@ Projekt posiada pionowy wycinek bezpiecznego przygotowania materiału z URL, Cla
 - Claim Extractor jest podłączony do jednego modelu LLM przez Groq;
 - działa endpoint `POST /api/prepare`;
 - działa kontrolowane pobieranie HTML/plain text, ekstrakcja jednego claimu, decyzja Accept/Reject oraz ręcznie uruchamiane wyszukiwanie, analiza i synteza materiałów, bez zapisu analiz;
-- deployment produkcyjny nie został jeszcze wykonany.
+- pierwszy deployment produkcyjny A0 został ręcznie zweryfikowany jako stabilny.
 
 ## Docelowy stack Course MVP
 
