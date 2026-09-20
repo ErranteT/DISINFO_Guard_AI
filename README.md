@@ -34,7 +34,6 @@ Docelowy podstawowy przepływ:
 - Analizowane jest konkretne twierdzenie, a nie cały materiał jako jedna całość.
 - System ocenia stan dostępnych dowodów, a nie „prawdę absolutną”.
 - Brak dowodów nie oznacza automatycznie fałszu.
-- `insufficient_data` jest prawidłowym wynikiem analizy.
 - `claim_unresolved` jest prawidłowym zakończeniem procesu, jeżeli nie uda się uzyskać zaakceptowanego twierdzenia.
 - Course MVP nie używa procentowego score.
 - Backend jest właścicielem statusów, reguł i orkiestracji procesu.
@@ -75,10 +74,53 @@ Obsługiwane są wyłącznie odpowiedzi `text/html` i `text/plain` w UTF-8, bez 
 
 Użyte technologie w tym wycinku to Next.js, TypeScript, Route Handlers, `parse5` i natywny backendowy `fetch` do Groq oraz Tavily Search. Testy używają wbudowanego mechanizmu Node, mockują granice zewnętrznych usług i nie wymagają internetu ani kluczy API.
 
-Docelowa architektura Course MVP zakłada wykorzystanie Next.js, TypeScript, Route Handlers, Supabase, Tavily, jednego abstrahowanego LLM oraz Vercel.
+Aktualny Course MVP wykorzystuje Next.js, TypeScript, Route Handlers, Tavily Search, Groq oraz Vercel. Supabase był wykorzystany wyłącznie w osobnym ćwiczeniu kursowym i nie jest częścią runtime aplikacji.
 
 Aktualny flow kończy się na `accepted claim + analyzed evidence` → Evidence Synthesis → deterministyczny `overallPattern` + modelowe `summary` renderowane pod evidence. Nie zaimplementowano jeszcze finalnego fact-checkingu, Supabase, właściwego `run`, końcowego verdictu ani zapisu historii analiz.
 
 ## Uruchomienie lokalne
 
-Instrukcja zostanie uzupełniona po utworzeniu i zweryfikowaniu podstawowego projektu Next.js.
+### Wymagania
+
+- Node.js
+- npm
+- klucz API Groq
+- klucz API Tavily
+
+### Instalacja
+
+1. Sklonuj repozytorium.
+
+2. Zainstaluj zależności:
+
+```bash
+npm install
+```
+
+3. Utwórz plik `.env.local` na podstawie `.env.example`:
+
+```env
+GROQ_API_KEY=
+TAVILY_API_KEY=
+```
+
+4. Uruchom aplikację:
+
+```bash
+npm run dev
+```
+
+5. Otwórz w przeglądarce:
+
+```text
+http://localhost:3000
+```
+
+### Weryfikacja
+
+```bash
+npm test
+npm run typecheck
+npm run lint
+npm run build
+```
