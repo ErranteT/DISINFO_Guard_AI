@@ -45,7 +45,7 @@ function validateFlowInput(body: unknown): ValidatedFlowInput | InputFailure {
     return {
       ok: false,
       code: "INVALID_ATTEMPT",
-      message: "Numer próby musi być liczbą całkowitą od 1 do 3.",
+      message: "The attempt number must be an integer from 1 to 3.",
     };
   }
 
@@ -59,7 +59,7 @@ function validateFlowInput(body: unknown): ValidatedFlowInput | InputFailure {
     return {
       ok: false,
       code: "INVALID_REJECTED_CLAIMS",
-      message: "Lista odrzuconych twierdzeń nie odpowiada numerowi próby.",
+      message: "The rejected claims list does not match the attempt number.",
     };
   }
 

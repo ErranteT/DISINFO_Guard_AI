@@ -19,16 +19,16 @@ const overallPatterns: OverallPattern[] = [
 ];
 
 export const overallPatternLabels: Record<OverallPattern, string> = {
-  supports_only: "Materiały głównie wspierają twierdzenie",
-  contradicts_only: "Materiały głównie podważają twierdzenie",
-  mixed: "Obraz dowodów jest mieszany",
-  context_only: "Brak materiałów bezpośrednio za lub przeciw",
-  no_evidence: "Brak materiałów do syntezy",
+  supports_only: "Supporting evidence",
+  contradicts_only: "Contradicting evidence",
+  mixed: "Mixed evidence",
+  context_only: "Contextual evidence",
+  no_evidence: "No relevant evidence",
 };
 
 export const synthesisErrorMessages: Record<EvidenceSynthesisErrorCode, string> = {
-  invalid_model_output: "Nie udało się poprawnie przygotować podsumowania dowodów.",
-  llm_provider_error: "Usługa podsumowania dowodów jest chwilowo niedostępna.",
+  invalid_model_output: "We couldn't prepare the evidence summary correctly.",
+  llm_provider_error: "The evidence summary service is temporarily unavailable.",
 };
 
 export class EvidenceFlowError extends Error {
@@ -191,8 +191,8 @@ export async function runEvidenceFlow(
 }
 
 export function relationLabel(relation: EvidenceRelation): string {
-  if (relation === "supports") return "Wspiera";
-  if (relation === "contradicts") return "Podważa";
-  if (relation === "context") return "Kontekst";
-  return "Nieistotny";
+  if (relation === "supports") return "Supports";
+  if (relation === "contradicts") return "Contradicts";
+  if (relation === "context") return "Provides context";
+  return "Irrelevant";
 }

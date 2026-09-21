@@ -33,12 +33,12 @@ export type EvidenceRetrievalErrorCode =
   | "EVIDENCE_INVALID_RESPONSE";
 
 const errorMessages: Record<EvidenceRetrievalErrorCode, string> = {
-  EVIDENCE_CONFIGURATION_ERROR: "Usługa wyszukiwania materiałów nie jest skonfigurowana.",
-  EVIDENCE_PROVIDER_TIMEOUT: "Wyszukiwanie materiałów przekroczyło limit czasu.",
-  EVIDENCE_AUTH_ERROR: "Usługa wyszukiwania materiałów odrzuciła autoryzację.",
-  EVIDENCE_RATE_LIMITED: "Usługa wyszukiwania materiałów jest chwilowo przeciążona.",
-  EVIDENCE_PROVIDER_ERROR: "Usługa wyszukiwania materiałów zwróciła błąd.",
-  EVIDENCE_INVALID_RESPONSE: "Usługa wyszukiwania materiałów zwróciła nieprawidłową odpowiedź.",
+  EVIDENCE_CONFIGURATION_ERROR: "The evidence search service is not configured.",
+  EVIDENCE_PROVIDER_TIMEOUT: "The evidence search timed out.",
+  EVIDENCE_AUTH_ERROR: "The evidence search service rejected authentication.",
+  EVIDENCE_RATE_LIMITED: "The evidence search service is temporarily overloaded.",
+  EVIDENCE_PROVIDER_ERROR: "The evidence search service returned an error.",
+  EVIDENCE_INVALID_RESPONSE: "The evidence search service returned an invalid response.",
 };
 
 export class EvidenceRetrievalError extends Error {
@@ -55,17 +55,17 @@ export function validateEvidenceClaim(body: unknown):
   | { ok: true; claim: string }
   | EvidenceInputFailure {
   if (typeof body !== "object" || body === null || Array.isArray(body) || !("claim" in body)) {
-    return { ok: false, code: "CLAIM_REQUIRED", message: "Twierdzenie jest wymagane." };
+    return { ok: false, code: "CLAIM_REQUIRED", message: "A claim is required." };
   }
 
   const claim = (body as Record<string, unknown>).claim;
   if (typeof claim !== "string") {
-    return { ok: false, code: "INVALID_CLAIM", message: "Twierdzenie musi być tekstem." };
+    return { ok: false, code: "INVALID_CLAIM", message: "The claim must be text." };
   }
 
   const trimmedClaim = claim.trim();
   if (!trimmedClaim) {
-    return { ok: false, code: "CLAIM_REQUIRED", message: "Twierdzenie jest wymagane." };
+    return { ok: false, code: "CLAIM_REQUIRED", message: "A claim is required." };
   }
 
   return { ok: true, claim: trimmedClaim };

@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   EvidenceFlowError,
   overallPatternLabels,
+  relationLabel,
   runEvidenceFlow,
   synthesisErrorMessages,
 } from "../lib/evidence-flow.ts";
@@ -61,7 +62,7 @@ test("runs retrieval, analysis, and synthesis in order with the minimal synthesi
         ],
       });
     }
-    return response({ overallPattern: "mixed", summary: "Materiały przedstawiają mieszany obraz." });
+    return response({ overallPattern: "mixed", summary: "The evidence presents a mixed picture." });
   };
 
   const result = await runEvidenceFlow("Accepted claim", request);
@@ -84,7 +85,7 @@ test("runs retrieval, analysis, and synthesis in order with the minimal synthesi
   assert.equal(result.evidenceCandidates[0].relation, "supports");
   assert.deepEqual(result.synthesis, {
     overallPattern: "mixed",
-    summary: "Materiały przedstawiają mieszany obraz.",
+    summary: "The evidence presents a mixed picture.",
   });
   assert.equal(result.synthesisError, null);
 });
@@ -96,7 +97,7 @@ test("skips analysis for empty candidates and uses the synthesis endpoint as sou
     if (url === "/api/evidence") return response({ candidates: [] });
     return response({
       overallPattern: "no_evidence",
-      summary: "Brak przeanalizowanych materiałów do utworzenia syntezy.",
+      summary: "There is no analysed evidence available to summarise.",
     });
   };
 
@@ -108,8 +109,8 @@ test("skips analysis for empty candidates and uses the synthesis endpoint as sou
 });
 
 for (const [code, expectedMessage] of Object.entries({
-  invalid_model_output: "Nie udało się poprawnie przygotować podsumowania dowodów.",
-  llm_provider_error: "Usługa podsumowania dowodów jest chwilowo niedostępna.",
+  invalid_model_output: "We couldn't prepare the evidence summary correctly.",
+  llm_provider_error: "The evidence summary service is temporarily unavailable.",
 })) {
   test(`${code} preserves analyzed evidence and does not retry synthesis`, async () => {
     let synthesisCalls = 0;
@@ -158,19 +159,26 @@ test("does not call synthesis after retrieval or analysis failure", async () => 
 
 test("maps all backend overall patterns to the approved UI labels", () => {
   assert.deepEqual(overallPatternLabels, {
-    supports_only: "Materiały głównie wspierają twierdzenie",
-    contradicts_only: "Materiały głównie podważają twierdzenie",
-    mixed: "Obraz dowodów jest mieszany",
-    context_only: "Brak materiałów bezpośrednio za lub przeciw",
-    no_evidence: "Brak materiałów do syntezy",
+    supports_only: "Supporting evidence",
+    contradicts_only: "Contradicting evidence",
+    mixed: "Mixed evidence",
+    context_only: "Contextual evidence",
+    no_evidence: "No relevant evidence",
   });
+});
+
+test("maps all evidence relations to the approved UI labels", () => {
+  assert.equal(relationLabel("supports"), "Supports");
+  assert.equal(relationLabel("contradicts"), "Contradicts");
+  assert.equal(relationLabel("context"), "Provides context");
+  assert.equal(relationLabel("irrelevant"), "Irrelevant");
 });
 
 test("separate runs return only their own synthesis result", async () => {
   const first = await runEvidenceFlow("First claim", async (url) => (
     url === "/api/evidence"
       ? response({ candidates: [] })
-      : response({ overallPattern: "no_evidence", summary: "Pierwsze podsumowanie." })
+      : response({ overallPattern: "no_evidence", summary: "First summary." })
   ));
   const second = await runEvidenceFlow("Second claim", async (url) => (
     url === "/api/evidence"
@@ -178,7 +186,7 @@ test("separate runs return only their own synthesis result", async () => {
       : response({ status: "error", code: "llm_provider_error" }, 502)
   ));
 
-  assert.equal(first.synthesis.summary, "Pierwsze podsumowanie.");
+  assert.equal(first.synthesis.summary, "First summary.");
   assert.equal(second.synthesis, null);
   assert.equal(second.synthesisError, "llm_provider_error");
 });

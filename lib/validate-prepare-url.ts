@@ -10,10 +10,10 @@ type ValidationFailure = { ok: false; code: PrepareUrlErrorCode; message: string
 export type PrepareUrlValidation = ValidationSuccess | ValidationFailure;
 
 const messages: Record<PrepareUrlErrorCode, string> = {
-  URL_REQUIRED: "Podaj adres URL.",
-  INVALID_URL: "Podaj prawidłowy adres URL.",
-  UNSUPPORTED_PROTOCOL: "Adres URL musi zaczynać się od http:// lub https://.",
-  LOCAL_URL_NOT_ALLOWED: "Lokalne adresy URL nie są dozwolone.",
+  URL_REQUIRED: "Enter a URL.",
+  INVALID_URL: "Enter a valid URL.",
+  UNSUPPORTED_PROTOCOL: "The URL must start with http:// or https://.",
+  LOCAL_URL_NOT_ALLOWED: "Local URLs are not allowed.",
 };
 
 function invalid(code: PrepareUrlErrorCode): ValidationFailure {

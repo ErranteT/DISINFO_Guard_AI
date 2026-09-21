@@ -58,11 +58,11 @@ export type ClaimExtractorErrorCode =
   | "CLAIM_MALFORMED_OUTPUT";
 
 const errorMessages: Record<ClaimExtractorErrorCode, string> = {
-  CLAIM_CONFIGURATION_ERROR: "Usługa wyodrębniania twierdzeń nie jest skonfigurowana.",
-  CLAIM_PROVIDER_TIMEOUT: "Wyodrębnianie twierdzenia przekroczyło limit czasu.",
-  CLAIM_RATE_LIMITED: "Usługa wyodrębniania twierdzeń jest chwilowo przeciążona.",
-  CLAIM_PROVIDER_ERROR: "Usługa wyodrębniania twierdzeń zwróciła błąd.",
-  CLAIM_MALFORMED_OUTPUT: "Usługa dwukrotnie zwróciła nieprawidłowy format twierdzenia.",
+  CLAIM_CONFIGURATION_ERROR: "The claim extraction service is not configured.",
+  CLAIM_PROVIDER_TIMEOUT: "Claim extraction timed out.",
+  CLAIM_RATE_LIMITED: "The claim extraction service is temporarily overloaded.",
+  CLAIM_PROVIDER_ERROR: "The claim extraction service returned an error.",
+  CLAIM_MALFORMED_OUTPUT: "The service returned an invalid claim format twice.",
 };
 
 export class ClaimExtractorError extends Error {

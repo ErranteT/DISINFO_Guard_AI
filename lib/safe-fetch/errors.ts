@@ -13,18 +13,18 @@ export type SafeFetchErrorCode =
   | "EMPTY_CONTENT";
 
 const messages: Record<SafeFetchErrorCode, string> = {
-  UNSAFE_TARGET: "Adres prowadzi do niedozwolonego celu sieciowego.",
-  DNS_RESOLUTION_FAILED: "Nie udało się rozwiązać adresu domeny.",
-  FETCH_TIMEOUT: "Pobieranie materiału przekroczyło limit czasu.",
-  FETCH_FAILED: "Nie udało się pobrać materiału.",
-  TOO_MANY_REDIRECTS: "Adres przekroczył dozwolony limit przekierowań.",
-  INVALID_REDIRECT: "Serwer zwrócił nieprawidłowe przekierowanie.",
-  HTTP_ERROR: "Serwer źródłowy zwrócił nieobsługiwany status HTTP.",
-  UNSUPPORTED_CONTENT_TYPE: "Podany adres nie prowadzi do obsługiwanego materiału tekstowego.",
-  UNSUPPORTED_CONTENT_ENCODING: "Serwer zwrócił nieobsługiwane kodowanie transportowe.",
-  UNSUPPORTED_CHARSET: "Materiał używa nieobsługiwanego kodowania znaków.",
-  RESPONSE_TOO_LARGE: "Materiał przekracza dozwolony limit rozmiaru.",
-  EMPTY_CONTENT: "Materiał nie zawiera użytecznej treści tekstowej.",
+  UNSAFE_TARGET: "The URL points to a prohibited network target.",
+  DNS_RESOLUTION_FAILED: "The domain name could not be resolved.",
+  FETCH_TIMEOUT: "Retrieving the material timed out.",
+  FETCH_FAILED: "The material could not be retrieved.",
+  TOO_MANY_REDIRECTS: "The URL exceeded the allowed redirect limit.",
+  INVALID_REDIRECT: "The server returned an invalid redirect.",
+  HTTP_ERROR: "The source server returned an unsupported HTTP status.",
+  UNSUPPORTED_CONTENT_TYPE: "The URL does not point to supported text content.",
+  UNSUPPORTED_CONTENT_ENCODING: "The server returned an unsupported content encoding.",
+  UNSUPPORTED_CHARSET: "The material uses an unsupported character encoding.",
+  RESPONSE_TOO_LARGE: "The material exceeds the allowed size limit.",
+  EMPTY_CONTENT: "The material does not contain usable text content.",
 };
 
 export class SafeFetchError extends Error {

@@ -23,9 +23,9 @@ type UnresolvedReason = "no_checkable_claim" | "insufficient_content" | "rejecte
 type EvidenceState = "idle" | "loading" | "success" | "error";
 
 const technicalErrorMessage =
-  "Nie udało się wyodrębnić twierdzenia. Spróbuj ponownie za chwilę.";
+  "We couldn't extract a claim. Please try again in a moment.";
 const evidenceErrorMessage =
-  "Nie udało się wyszukać lub przeanalizować materiałów. Spróbuj ponownie za chwilę.";
+  "We couldn't find or analyse evidence. Please try again in a moment.";
 
 function isClaimPendingResponse(value: unknown): value is {
   status: "claim_pending"; claim: string; attempt: number;
@@ -69,12 +69,12 @@ function isControlledErrorResponse(
 
 function unresolvedMessage(reason: UnresolvedReason): string {
   if (reason === "insufficient_content") {
-    return "Materiał nie zawiera wystarczającej treści do wyodrębnienia twierdzenia.";
+    return "The material does not contain enough content to extract a claim.";
   }
   if (reason === "rejected_limit") {
-    return "Odrzucono trzy propozycje. Nie udało się uzyskać twierdzenia do dalszej analizy.";
+    return "Three suggestions were rejected. We couldn't identify a claim for further analysis.";
   }
-  return "W materiale nie znaleziono jednego konkretnego, sprawdzalnego twierdzenia.";
+  return "No single, specific, checkable claim was found in the material.";
 }
 
 export default function Home() {
@@ -226,77 +226,77 @@ export default function Home() {
           <span className={styles.shield} aria-hidden="true">✓</span>
           <span>DISINFO-Guard <em>AI</em></span>
         </div>
-        <p>Sprawdzaj informacje odpowiedzialnie.</p>
+        <p>Assess information responsibly.</p>
       </header>
 
       <section className={styles.hero} aria-labelledby="page-title">
-        <span className={styles.eyebrow}>Wyodrębnianie twierdzenia</span>
-        <h1 id="page-title">Sprawdź, zanim uwierzysz.</h1>
-        <p>Dodaj adres artykułu lub posta, aby wyodrębnić jedno twierdzenie do dalszej analizy.</p>
+        <span className={styles.eyebrow}>Claim review</span>
+        <h1 id="page-title">Check before you trust.</h1>
+        <p>Add the URL of an article or post to extract one claim for further analysis.</p>
       </section>
 
       {!showForm ? (
-        <section className={styles.hub} aria-label="Rozpocznij przygotowanie adresu">
+        <section className={styles.hub} aria-label="Start URL preparation">
           <span className={`${styles.line} ${styles.lineOne}`} aria-hidden="true" />
           <span className={`${styles.line} ${styles.lineTwo}`} aria-hidden="true" />
           <span className={`${styles.line} ${styles.lineThree}`} aria-hidden="true" />
           <span className={`${styles.line} ${styles.lineFour}`} aria-hidden="true" />
           <div className={`${styles.node} ${styles.nodeTopLeft}`} aria-hidden="true">
-            <span>◌</span>Źródła<br /><small>w kolejnych etapach</small>
+            <span>◌</span>Sources<br /><small>in later stages</small>
           </div>
           <div className={`${styles.node} ${styles.nodeTopRight}`} aria-hidden="true">
-            <span>◷</span>Historia<br /><small>w kolejnych etapach</small>
+            <span>◷</span>History<br /><small>in later stages</small>
           </div>
           <div className={`${styles.node} ${styles.nodeBottomLeft}`} aria-hidden="true">
-            <span>◇</span>Kontekst<br /><small>w kolejnych etapach</small>
+            <span>◇</span>Context<br /><small>in later stages</small>
           </div>
           <div className={`${styles.node} ${styles.nodeBottomRight}`} aria-hidden="true">
-            <span>↗</span>Link URL<br /><small>zacznij tutaj</small>
+            <span>↗</span>URL link<br /><small>start here</small>
           </div>
           <button className={styles.hubButton} type="button" onClick={() => setShowForm(true)}>
             <span className={styles.hubIcon} aria-hidden="true">✦</span>
-            <strong>Sprawdź<br />adres URL</strong>
-            <small>Kliknij, aby zacząć</small>
+            <strong>Start with<br />a URL</strong>
+            <small>Start here</small>
           </button>
         </section>
       ) : (
         <section className={styles.formCard} aria-labelledby="form-title">
           <div className={styles.formHeading}>
             <div>
-              <h2 id="form-title">Dodaj adres URL</h2>
-              <p>Pobierzemy materiał i wyodrębnimy jedno sprawdzalne twierdzenie.</p>
+              <h2 id="form-title">Add a URL</h2>
+              <p>We’ll retrieve the material and extract one checkable claim.</p>
             </div>
             <button className={styles.backButton} type="button" onClick={resetToHub}>
-              Wróć do hubu
+              Back to hub
             </button>
           </div>
           <form onSubmit={handleSubmit} noValidate>
-            <label htmlFor="article-url">Adres artykułu lub posta</label>
+            <label htmlFor="article-url">Article or post URL</label>
             <input
               id="article-url"
               className={inputError ? styles.inputInvalid : undefined}
               type="url"
               value={url}
               onChange={(event) => setUrl(event.target.value)}
-              placeholder="https://example.com/artykul"
+              placeholder="https://example.com/article"
               aria-invalid={Boolean(inputError)}
               aria-describedby={inputError ? "url-error" : undefined}
               disabled={requestState === "loading"}
             />
             {inputError ? <p id="url-error" className={styles.inputError} role="alert">{inputError}</p> : null}
             <button className={styles.submitButton} type="submit" disabled={requestState === "loading"}>
-              {requestState === "loading" ? "Analizuję materiał…" : "Wyodrębnij twierdzenie"}
+              {requestState === "loading" ? "Analysing material…" : "Extract claim"}
             </button>
           </form>
 
           {requestState === "claim_pending" && pendingClaim ? (
             <section className={styles.claimCard} aria-labelledby="claim-title">
-              <p className={styles.claimAttempt}>Propozycja {pendingClaim.attempt} z 3</p>
-              <h3 id="claim-title">Wyodrębnione twierdzenie</h3>
+              <p className={styles.claimAttempt}>Claim {pendingClaim.attempt} of 3</p>
+              <h3 id="claim-title">Extracted claim</h3>
               <blockquote>{pendingClaim.claim}</blockquote>
               <div className={styles.claimActions}>
-                <button className={styles.acceptButton} type="button" onClick={handleAccept}>Akceptuj</button>
-                <button className={styles.rejectButton} type="button" onClick={handleReject}>Odrzuć</button>
+                <button className={styles.acceptButton} type="button" onClick={handleAccept}>Accept</button>
+                <button className={styles.rejectButton} type="button" onClick={handleReject}>Reject</button>
               </div>
             </section>
           ) : null}
@@ -304,9 +304,9 @@ export default function Home() {
           {acceptedClaim ? (
             <section className={styles.evidenceSection} aria-labelledby="accepted-claim-title">
               <div className={styles.successMessage} role="status">
-                <strong id="accepted-claim-title">Twierdzenie zaakceptowane.</strong>
+                <strong id="accepted-claim-title">Claim accepted.</strong>
                 <p>{acceptedClaim}</p>
-                <span>Możesz teraz wyszukać materiały dotyczące tego twierdzenia.</span>
+                <span>You can now search for evidence related to this claim.</span>
               </div>
               <button
                 className={styles.analysisButton}
@@ -314,13 +314,13 @@ export default function Home() {
                 onClick={handleStartAnalysis}
                 disabled={evidenceState === "loading"}
               >
-                {evidenceState === "loading" ? "Analizuję materiały…" : "Rozpocznij analizę"}
+                {evidenceState === "loading" ? "Analysing evidence…" : "Start analysis"}
               </button>
 
               {evidenceState === "success" ? (
                 <div className={styles.evidenceResults} role="status">
-                  <h3>Znalezione materiały</h3>
-                  <p>Znaleziono: {evidenceCandidates.length}</p>
+                  <h3>Evidence retrieved</h3>
+                  <p>{evidenceCandidates.length} sources found</p>
                   {evidenceCandidates.length ? (
                     <ol>
                       {evidenceCandidates.map((candidate) => (
@@ -331,18 +331,18 @@ export default function Home() {
                           {candidate.title ? <small>{candidate.url}</small> : null}
                           <p>{candidate.content}</p>
                           <div className={styles.evidenceRelation}>
-                            <strong>Relacja do twierdzenia: {relationLabel(candidate.relation)}</strong>
+                            <strong>Relation to claim: {relationLabel(candidate.relation)}</strong>
                             <span>{candidate.reason}</span>
                           </div>
                         </li>
                       ))}
                     </ol>
                   ) : (
-                    <p>Wyszukiwanie zakończyło się poprawnie, ale nie znaleziono użytecznych materiałów.</p>
+                    <p>The search completed successfully, but no useful evidence was found.</p>
                   )}
                   {synthesis || synthesisError ? (
                     <section className={styles.synthesisSection} aria-labelledby="synthesis-title">
-                      <h4 id="synthesis-title">Łączny obraz dowodów</h4>
+                      <h4 id="synthesis-title">Evidence overview</h4>
                       {synthesis ? (
                         <>
                           <strong>{overallPatternLabels[synthesis.overallPattern]}</strong>

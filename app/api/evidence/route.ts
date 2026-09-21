@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 const internalError = {
   status: "error",
   code: "INTERNAL_ERROR",
-  message: "Nie udało się wyszukać materiałów. Spróbuj ponownie.",
+  message: "We couldn't search for evidence. Please try again.",
 };
 
 export async function POST(request: Request) {

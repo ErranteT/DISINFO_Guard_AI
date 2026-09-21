@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 const internalError = {
   status: "error",
   code: "INTERNAL_ERROR",
-  message: "Nie udało się przygotować adresu do analizy. Spróbuj ponownie.",
+  message: "We couldn't prepare the URL for analysis. Please try again.",
 };
 
 export async function POST(request: Request) {
